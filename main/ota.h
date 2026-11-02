@@ -16,6 +16,7 @@ public:
     ~Ota();
 
     NetworkResult<> CheckVersion();
+    bool UseStoredWebsocketConfig();
     esp_err_t Activate();
     bool HasActivationChallenge() { return has_activation_challenge_; }
     bool HasNewVersion() { return has_new_version_; }

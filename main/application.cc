@@ -369,7 +369,7 @@ void Application::ActivationTask() {
     // Check for new assets version
     CheckAssetsVersion();
 
-    // Check for new firmware version
+    // Get the server's connection settings. This firmware never looks for updates.
     CheckNewVersion();
 
     // Initialize the protocol
@@ -447,10 +447,18 @@ void Application::CheckNewVersion() {
     auto& board = Board::GetInstance();
     while (true) {
         auto display = board.GetDisplay();
-        display->SetStatus(Lang::Strings::CHECKING_NEW_VERSION);
+        display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
 
         auto check = ota_->CheckVersion();
         if (!check) {
+            // Booting does not depend on the server. Reaching it is the websocket's job.
+            if (ota_->UseStoredWebsocketConfig()) {
+                ESP_LOGW(TAG, "Server settings unavailable, using the stored ones: %s",
+                         check.error().ToString().c_str());
+                ota_->MarkCurrentVersionValid();
+                return;
+            }
+
             retry_count++;
             if (retry_count >= MAX_RETRY) {
                 ESP_LOGE(TAG, "Too many retries, exit version check");
@@ -490,14 +498,6 @@ void Application::CheckNewVersion() {
         retry_count = 0;
         retry_delay = 10;  // Reset retry delay
 
-        if (ota_->HasNewVersion()) {
-            if (UpgradeFirmware(ota_->GetFirmwareUrl(), ota_->GetFirmwareVersion())) {
-                return;  // This line will never be reached after reboot
-            }
-            // If upgrade failed, continue to normal operation
-        }
-
-        // No new version, mark the current version as valid
         ota_->MarkCurrentVersionValid();
         if (!ota_->HasActivationCode() && !ota_->HasActivationChallenge()) {
             // Exit the loop if done checking new version
