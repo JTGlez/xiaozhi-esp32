@@ -2,10 +2,14 @@
 
 ## Origen
 
-Kit: `elena-chan-avatar-kit-v2.1-fit/elena-chan-avatar-kit-v2.1/` («Avatar Kit v2.1,
-encuadre ajustado»), una revisión del kit v2 que dibuja la figura al 87,5 % dentro del
-mismo lienzo 320 × 240. Esa carpeta no está seguida por Git; los archivos necesarios
-para compilar viven aquí dentro de la placa, de modo que una clonación limpia basta.
+Kit: `elena-chan-avatar-kit-v3-platinum/` («Avatar Kit v3 (Platinum)»,
+`manifest.json` versión `3.0-platinum`), revisión cromática de v2.1-fit: mismo
+personaje, mismas 12 expresiones, mismas poses, mismo encuadre (figura al 87,5 %
+dentro del mismo lienzo 320 × 240). Cambia **únicamente el cabello**, de marfil
+cálido a platinado frío con sombras gris-lila, mediante el script reproducible
+`recolor_platinum.py` del propio kit. v2.1-fit queda obsoleto como fuente. Esa
+carpeta no está seguida por Git; los archivos necesarios para compilar viven
+aquí dentro de la placa, de modo que una clonación limpia basta.
 
 Se copiaron **solo** los 12 GIFs ligeros de `gifs/`. No se copiaron `gifs-hq/`,
 `frames/`, `keyframes/`, `mouths/`, `preview.png`, `sprite_sheet.*`, ni los cabezales de
@@ -14,19 +18,19 @@ entrega.
 
 | Archivo | Bytes | Cuadros por vuelta | Lienzo |
 | --- | --- | --- | --- |
-| `gifs/neutral.gif` | 50623 | 2 | 320 × 240 |
-| `gifs/happy.gif` | 75051 | 3 | 320 × 240 |
-| `gifs/sad.gif` | 50566 | 2 | 320 × 240 |
-| `gifs/thinking.gif` | 76890 | 3 | 320 × 240 |
-| `gifs/sleeping.gif` | 74164 | 3 | 320 × 240 |
-| `gifs/pet.gif` | 76552 | 3 | 320 × 240 |
-| `gifs/shake.gif` | 75497 | 3 | 320 × 240 |
-| `gifs/speaking.gif` | 78829 | 3 | 320 × 240 |
-| `gifs/listening.gif` | 76120 | 3 | 320 × 240 |
-| `gifs/look_left.gif` | 78782 | 3 | 320 × 240 |
-| `gifs/look_right.gif` | 75278 | 3 | 320 × 240 |
-| `gifs/email.gif` | 77534 | 3 | 320 × 240 |
-| **Total** | **865886** | **34** | |
+| `gifs/neutral.gif` | 48110 | 2 | 320 × 240 |
+| `gifs/happy.gif` | 64260 | 3 | 320 × 240 |
+| `gifs/sad.gif` | 46516 | 2 | 320 × 240 |
+| `gifs/thinking.gif` | 71290 | 3 | 320 × 240 |
+| `gifs/sleeping.gif` | 65394 | 3 | 320 × 240 |
+| `gifs/pet.gif` | 70919 | 3 | 320 × 240 |
+| `gifs/shake.gif` | 69761 | 3 | 320 × 240 |
+| `gifs/speaking.gif` | 74352 | 3 | 320 × 240 |
+| `gifs/listening.gif` | 69932 | 3 | 320 × 240 |
+| `gifs/look_left.gif` | 73739 | 3 | 320 × 240 |
+| `gifs/look_right.gif` | 70730 | 3 | 320 × 240 |
+| `gifs/email.gif` | 70707 | 3 | 320 × 240 |
+| **Total** | **795710** | **34** | |
 
 Los 12 GIFs suman 34 cuadros por vuelta (2–3 por archivo). El decodificador C del
 firmware ejecutado en el ordenador produce 68 cuadros por configuración: dos vueltas de
@@ -41,15 +45,21 @@ Cómo se midió (no son cifras del kit, son comprobaciones propias):
   mínimos de `scripts/tests/fixtures/avatar_gif/` (`lvgl.h`, `esp_log.h`,
   `avatar_gif_host.c`), con `LV_GIF_CACHE_DECODE_DATA` a 0 y a 1.
 - Contraste independiente con Pillow 13.0.0 (`n_frames`, `loop`, `duration`) y con
-  `gifs_manifest.json` del propio kit: las tres fuentes coinciden.
+  `gifs_manifest.json` del propio kit: las tres fuentes coinciden en v3, incluido el
+  total de 795710 bytes. El primer cuadro de los 12 GIFs convertido a RGB565 por el
+  decodificador del firmware coincide píxel a píxel con el de Pillow truncando a
+  5/6/5 bits, en los 12 archivos.
 
-Duraciones según el GIF: 300 ms por cuadro, salvo `speaking` (140 ms). Bucle infinito
-(`loop = 0`). El firmware respeta esas duraciones; no se fija un FPS propio.
+Duraciones según el GIF (medidas en v3 leyendo el Graphic Control Extension de cada
+cuadro): las expresiones de tres cuadros usan 300, 220 y 460 ms; `neutral` y `sad`,
+300 y 680 ms; `speaking`, 140, 150 y 180 ms. Bucle infinito (`loop = 0`). El firmware
+respeta esas duraciones; no se fija un FPS propio.
 
 ## Alias
 
 `aliases.json` (24 entradas) es exactamente la tabla fija de
-`main/boards/elena-stackchan/avatar_controller.cc`. Se generó desde ese código:
+`main/boards/elena-stackchan/avatar_controller.cc`. Se generó desde ese código y no
+cambió con el recolor:
 
 ```sh
 python3 scripts/elena_avatar_assets.py aliases \
@@ -83,22 +93,29 @@ python3 scripts/elena_avatar_assets.py header --out build/avatar_fallback.h
 
 ## Hashes
 
-`SHA256SUMS` usa el formato de `sha256sum` y lista los 12 GIFs. Cualquier comprobación:
+`SHA256SUMS` usa el formato de `sha256sum` y lista los 12 GIFs **y**
+`neutral.rgb565`. Cualquier comprobación:
 
 ```sh
+cd main/boards/elena-stackchan/assets && sha256sum gifs/*.gif neutral.rgb565 > SHA256SUMS
 python3 scripts/elena_avatar_assets.py validate
 ```
 
-Fallaba antes de esta entrega si un hash, una dimensión de lienzo, un alias o el tamaño
-del respaldo no coinciden; la prueba `test_missing_file_or_invalid_alias_fails` lo
-verifica.
+`validate` rechaza hashes distintos, archivos de más o de menos, lienzos que no sean
+320 × 240, alias inválidos o apuntando a GIFs inexistentes, un respaldo de tamaño
+distinto de 153600 bytes y un respaldo sin entrada en `SHA256SUMS` o con hash distinto.
+Antes de esta entrega un respaldo corruptado pasaba la validación; la prueba
+`test_validate_rejects_corrupted_fallback` cierra ese hueco. Las pruebas
+`test_missing_file_or_invalid_alias_fails`, `test_validate_rejects_wrong_canvas`,
+`test_validate_rejects_fallback_of_wrong_size` y
+`test_fallback_rejects_short_decoder_output` verifican cada guardián.
 
 ## Licencia
 
 El kit **no declara ninguna licencia**: ni su `README.md`, ni sus archivos sueltos, ni su
 carpeta `source/` incluyen aviso de licencia para la ilustración. La identidad de Elena
-(cabello marfil, laurel, toga) es suya, y sus archivos difieren byte a byte de las
-animaciones del proyecto de referencia.
+(cabello marfil, platinado en v3, laurel, toga) es suya, y sus archivos difieren byte a
+byte de las animaciones del proyecto de referencia.
 
 El proyecto de referencia (`dax8it/nous-girl-stackchan`, cuya copia consultada está en
 `vendor/firmwares/nous-girl-stackchan/`) licencia su código y sus documentos con MIT, y
@@ -106,7 +123,8 @@ declara el arte aparte: `faces/starter/` es CC0, mientras que `faces/tribute/` *
 bajo ninguna licencia abierta** — solo uso personal y no comercial. El kit de Elena usa
 los nombres, el alias `_emote_aliases.json` y las convenciones de esa guía
 (`docs/SPRITES.md`), pero no se documenta que su ilustración derive de ese arte sin
-licencia, ni quién la creó.
+licencia, ni quién la creó. El recolor v3 parte del arte de v2.1-fit y no añade ninguna
+licencia.
 
 Consecuencia registrada sin suposiciones:
 

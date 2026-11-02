@@ -136,11 +136,12 @@ def validate_avatar_assets(asset_dir: Path) -> dict:
 
     checksums = read_sha256sums(sums_path)
     on_disk = sorted(
-        f"{GIFS_SUBDIR}/{p.name}" for p in gifs_dir.iterdir() if p.suffix.lower() == ".gif"
+        [f"{GIFS_SUBDIR}/{p.name}" for p in gifs_dir.iterdir() if p.suffix.lower() == ".gif"]
+        + [FALLBACK_FILE]
     )
     if sorted(checksums) != on_disk:
         raise AvatarAssetError(
-            f"{SHA256SUMS_FILE} lists {sorted(checksums)} but {gifs_dir} holds {on_disk}"
+            f"{SHA256SUMS_FILE} lists {sorted(checksums)} but the assets hold {on_disk}"
         )
 
     gifs = {}
@@ -151,6 +152,10 @@ def validate_avatar_assets(asset_dir: Path) -> dict:
         actual = sha256_file(path)
         if actual != digest:
             raise AvatarAssetError(f"{entry}: sha256 {actual} != recorded {digest}")
+        if entry == FALLBACK_FILE:
+            # The static fallback is raw RGB565, verified by hash and size
+            # below; it is not a GIF and never joins the gif table.
+            continue
         metadata = gif_metadata(path)
         if (metadata["width"], metadata["height"]) != (CANVAS_WIDTH, CANVAS_HEIGHT):
             raise AvatarAssetError(
@@ -177,6 +182,12 @@ def validate_avatar_assets(asset_dir: Path) -> dict:
         raise AvatarAssetError(
             f"{FALLBACK_FILE}: {len(fallback_bytes)} bytes, expected {RGB565_SIZE} "
             f"({CANVAS_WIDTH}x{CANVAS_HEIGHT} RGB565)"
+        )
+    fallback_digest = checksums.get(FALLBACK_FILE)
+    actual_fallback = sha256_file(fallback_path)
+    if fallback_digest != actual_fallback:
+        raise AvatarAssetError(
+            f"{FALLBACK_FILE}: sha256 {actual_fallback} != recorded {fallback_digest}"
         )
     neutral = gifs.get("neutral")
     if neutral is None:

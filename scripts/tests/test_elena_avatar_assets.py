@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
@@ -47,7 +48,7 @@ GIF_NAMES = (
     "look_right",
     "email",
 )
-TOTAL_GIF_BYTES = 865886
+TOTAL_GIF_BYTES = 795710
 CANVAS_WIDTH = 320
 CANVAS_HEIGHT = 240
 RGB565_SIZE = CANVAS_WIDTH * CANVAS_HEIGHT * 2
@@ -100,6 +101,45 @@ def inspect_gif(binary: Path, gif: Path) -> dict:
     return parsed
 
 
+def copy_asset_tree(dst: Path) -> Path:
+    """Temporary copy of the committed asset tree; tests never touch the real one."""
+    dst.mkdir(parents=True)
+    shutil.copytree(GIFS_DIR, dst / "gifs")
+    shutil.copy2(ALIASES_JSON, dst / "aliases.json")
+    shutil.copy2(SHA256SUMS, dst / "SHA256SUMS")
+    shutil.copy2(FALLBACK_RGB565, dst / "neutral.rgb565")
+    return dst
+
+
+def packaged_at(blob: bytes, payload: bytes) -> bool:
+    """True if pack_assets_simple stored `payload` verbatim (after its ZZ marker)."""
+    start = 12
+    while True:
+        i = blob.find(payload, start)
+        if i < 0:
+            return False
+        if blob[max(12, i - 2) : i] == b"\x5a\x5a":
+            return True
+        start = i + 1
+
+
+def packaged_json_objects(blob: bytes) -> list:
+    """JSON objects packaged verbatim in an assets.bin (index.json, aliases)."""
+    objects = []
+    start = 12
+    while True:
+        i = blob.find(b"\x5a\x5a{", start)
+        if i < 0:
+            return objects
+        text = blob[i + 2 :].decode("utf-8", "replace")
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(text)
+            objects.append(obj)
+            start = i + 2 + len(json.dumps(obj, separators=(",", ":")))
+        except json.JSONDecodeError:
+            start = i + 2
+
+
 class ElenaAvatarAssetsTest(unittest.TestCase):
     def test_manifest_and_all_frames_decode(self):
         manifest = AVA.validate_avatar_assets(ASSETS)
@@ -115,7 +155,10 @@ class ElenaAvatarAssetsTest(unittest.TestCase):
         for line in SHA256SUMS.read_text(encoding="utf-8").splitlines():
             digest, _, name = line.partition("  ")
             checksums[name] = digest
-        self.assertEqual(sorted(checksums), sorted(f"gifs/{n}.gif" for n in GIF_NAMES))
+        self.assertEqual(
+            sorted(checksums),
+            sorted([f"gifs/{n}.gif" for n in GIF_NAMES] + ["neutral.rgb565"]),
+        )
         for name, digest in checksums.items():
             self.assertEqual(digest, sha256(ASSETS / name), name)
 
@@ -263,6 +306,173 @@ class ElenaAvatarAssetsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 AVA.validate_avatar_assets(root)
 
+    def test_text_font_survives_emoji_directory(self):
+        # Production change this catches: build_assets_integrated ignoring
+        # text_font_path when emoji_directory is set.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            font_src = root / "font_noto_sans_common_20_4.bin"
+            font_bytes = bytes((i * 37) % 256 for i in range(2048))
+            font_src.write_bytes(font_bytes)
+            output = root / "assets.bin"
+            self.assertTrue(
+                BUILD.build_assets_integrated(
+                    None,
+                    None,
+                    str(font_src),
+                    None,
+                    None,
+                    str(output),
+                    font_bundle_id="noto-v1",
+                    emoji_directory=str(GIFS_DIR),
+                    emoji_aliases=str(ALIASES_JSON),
+                )
+            )
+            packed = output.read_bytes()
+            self.assertTrue(packaged_at(packed, font_bytes))
+            indices = packaged_json_objects(packed)
+            index = next(obj for obj in indices if "emoji_collection" in obj)
+            self.assertEqual(index["text_font"], font_src.name)
+            aliases = json.loads(ALIASES_JSON.read_text(encoding="utf-8"))
+            self.assertEqual(
+                len(index["emoji_collection"]), len(GIF_NAMES) + len(aliases)
+            )
+            by_name = {entry["name"]: entry["file"] for entry in index["emoji_collection"]}
+            for name in GIF_NAMES:
+                self.assertEqual(by_name[name], f"{name}.gif", name)
+                self.assertTrue(packaged_at(packed, (GIFS_DIR / f"{name}.gif").read_bytes()), name)
+
+    def test_srmodels_survive_emoji_directory(self):
+        # Production change this catches: build_assets_integrated dropping the
+        # srmodels value (or not passing it to generate_index_json) when
+        # emoji_directory is set. The real model copy is out of scope here, so
+        # process_sr_models is patched; every other step is the real one.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "assets.bin"
+            captured = {}
+            original_generate = BUILD.generate_index_json
+
+            def spy_generate(assets_dir, srmodels, *args, **kwargs):
+                captured["assets_dir"] = assets_dir
+                captured["srmodels"] = srmodels
+                Path(assets_dir, "srmodels.bin").write_bytes(b"fake-srmodels-payload")
+                result = original_generate(assets_dir, srmodels, *args, **kwargs)
+                # temp_build is removed in build_assets_integrated's finally
+                captured["index_json"] = json.loads(
+                    (Path(assets_dir) / "index.json").read_text(encoding="utf-8")
+                )
+                return result
+
+            with mock.patch.object(
+                BUILD, "process_sr_models", return_value="srmodels.bin"
+            ), mock.patch.object(BUILD, "generate_index_json", side_effect=spy_generate):
+                self.assertTrue(
+                    BUILD.build_assets_integrated(
+                        ["fake-wakenet-dir"],
+                        None,
+                        None,
+                        None,
+                        None,
+                        str(output),
+                        emoji_directory=str(GIFS_DIR),
+                        emoji_aliases=str(ALIASES_JSON),
+                    )
+                )
+            self.assertIn("srmodels", captured, "srmodels never reached generate_index_json")
+            self.assertEqual(captured["srmodels"], "srmodels.bin")
+            index = captured.get("index_json", {})
+            self.assertEqual(index.get("srmodels"), "srmodels.bin")
+            self.assertEqual(
+                len(index.get("emoji_collection", [])),
+                len(GIF_NAMES) + len(json.loads(ALIASES_JSON.read_text(encoding="utf-8"))),
+            )
+            self.assertTrue(packaged_at(output.read_bytes(), b"fake-srmodels-payload"))
+
+    def test_collection_and_directory_are_mutually_exclusive(self):
+        # Production change this catches: build_assets_integrated accepting both
+        # emoji_collection_path and emoji_directory in the same build.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "assets.bin"
+            self.assertFalse(
+                BUILD.build_assets_integrated(
+                    None,
+                    None,
+                    None,
+                    str(GIFS_DIR),
+                    None,
+                    str(output),
+                    emoji_directory=str(GIFS_DIR),
+                    emoji_aliases=str(ALIASES_JSON),
+                )
+            )
+            self.assertFalse(output.exists())
+
+    def test_header_rejects_wrong_size(self):
+        # Production change this catches: write_avatar_fallback_header dropping
+        # its input-size check and emitting a truncated/fattened C array.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            short = root / "short.rgb565"
+            short.write_bytes(FALLBACK_RGB565.read_bytes()[:4096])
+            with self.assertRaises(ValueError):
+                AVA.write_avatar_fallback_header(short, root / "short.h")
+            long = root / "long.rgb565"
+            long.write_bytes(FALLBACK_RGB565.read_bytes() + b"\x00")
+            with self.assertRaises(ValueError):
+                AVA.write_avatar_fallback_header(long, root / "long.h")
+            self.assertFalse((root / "short.h").exists())
+            self.assertFalse((root / "long.h").exists())
+
+    def test_fallback_rejects_short_decoder_output(self):
+        # Production change this catches: prepare_avatar_fallback no longer
+        # checking how many bytes the decoder actually produced. A decoder
+        # that exits 0 but writes too few (or too many) bytes must be
+        # rejected here; in the oversized case the produced file is even
+        # recorded with a fresh hash, so only the produced-size check can
+        # stop it before it would validate as a "correct" fallback.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def make_decoder(name: str, size: int) -> Path:
+                decoder = root / name
+                decoder.write_text(
+                    "#!/usr/bin/env python3\n"
+                    "import sys\n"
+                    f"open(sys.argv[3], 'wb').write(b'\\x00' * {size})\n",
+                    encoding="utf-8",
+                )
+                decoder.chmod(0o755)
+                return decoder
+
+            out = root / "out.rgb565"
+            with self.assertRaises(ValueError, msg="1024-byte decoder output accepted"):
+                AVA.prepare_avatar_fallback(GIFS_DIR / "neutral.gif", out,
+                                            decoder=make_decoder("short_decoder", 1024))
+            self.assertLess(out.stat().st_size, RGB565_SIZE)
+
+            oversized = root / "oversized.rgb565"
+            with self.assertRaises(ValueError, msg="153601-byte decoder output accepted"):
+                AVA.prepare_avatar_fallback(GIFS_DIR / "neutral.gif", oversized,
+                                            decoder=make_decoder("fat_decoder", RGB565_SIZE + 1))
+            self.assertGreater(oversized.stat().st_size, RGB565_SIZE)
+
+            # With the produced-size check gone, the oversized file above
+            # would carry a fresh valid hash in SHA256SUMS and validate
+            # clean; the check must reject it before that stage.
+            tree = copy_asset_tree(root / "assets")
+            fat = tree / "neutral.rgb565"
+            fat.write_bytes(oversized.read_bytes())
+            digest = hashlib.sha256(fat.read_bytes()).hexdigest()
+            lines = SHA256SUMS.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(lines):
+                if line.endswith("  neutral.rgb565"):
+                    lines[index] = digest + "  neutral.rgb565"
+            (tree / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            with self.assertRaises(ValueError, msg="oversized fallback validated clean"):
+                AVA.validate_avatar_assets(tree)
+
     def test_fallback_matches_neutral_rgb565(self):
         committed = FALLBACK_RGB565.read_bytes()
         self.assertEqual(len(committed), RGB565_SIZE)
@@ -364,6 +574,79 @@ class ElenaAvatarGifMetadataTest(unittest.TestCase):
             broken.write_bytes(b"GIF89a" + struct.pack("<HH", 4, 4) + b"\x00\x00\x00")
             with self.assertRaises(ValueError):
                 AVA.gif_metadata(broken)
+
+
+class ElenaAvatarValidateGuardsTest(unittest.TestCase):
+    def test_validate_rejects_wrong_canvas(self):
+        # Production change this catches: the 320x240 canvas check being dropped
+        # from validate_avatar_assets or prepare_avatar_fallback. The recorded
+        # hashes are refreshed for the edited GIF (and the fallback line), so
+        # only the canvas checks can catch the edit.
+        with tempfile.TemporaryDirectory() as directory:
+            root = copy_asset_tree(Path(directory) / "assets")
+            data = bytearray((root / "gifs" / "happy.gif").read_bytes())
+            data[6:8] = (318).to_bytes(2, "little")  # logical width, GIF header
+            (root / "gifs" / "happy.gif").write_bytes(bytes(data))
+            digest = hashlib.sha256(bytes(data)).hexdigest()
+            lines = SHA256SUMS.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(lines):
+                if line.endswith("  gifs/happy.gif"):
+                    lines[index] = digest + "  gifs/happy.gif"
+                elif line.endswith("  neutral.rgb565"):
+                    lines[index] = (
+                        hashlib.sha256((root / "neutral.rgb565").read_bytes()).hexdigest()
+                        + "  neutral.rgb565"
+                    )
+            (root / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                AVA.validate_avatar_assets(root)
+
+            broken_gif = root / "gifs" / "happy.gif"
+            with self.assertRaises(ValueError):
+                AVA.prepare_avatar_fallback(broken_gif, root / "out.rgb565",
+                                            decoder=Path(sys.executable))
+
+    def test_validate_rejects_fallback_of_wrong_size(self):
+        # Production change this catches: the fallback size check being dropped
+        # from validate_avatar_assets. The recorded hash is refreshed for the
+        # truncated file, so only the size check can catch it.
+        with tempfile.TemporaryDirectory() as directory:
+            root = copy_asset_tree(Path(directory) / "assets")
+            fallback = root / "neutral.rgb565"
+            truncated = fallback.read_bytes()[:1000]
+            fallback.write_bytes(truncated)
+            digest = hashlib.sha256(truncated).hexdigest()
+            lines = SHA256SUMS.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(lines):
+                if line.endswith("  neutral.rgb565"):
+                    lines[index] = digest + "  neutral.rgb565"
+            (root / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                AVA.validate_avatar_assets(root)
+
+    def test_validate_rejects_corrupted_fallback(self):
+        # Production change this catches: neutral.rgb565 missing from
+        # SHA256SUMS and/or validate_avatar_assets not checking its hash.
+        # Today this passes validation, which is the defect under test.
+        with tempfile.TemporaryDirectory() as directory:
+            root = copy_asset_tree(Path(directory) / "assets")
+            fallback = root / "neutral.rgb565"
+            data = bytearray(fallback.read_bytes())
+            data[12345] ^= 0xFF
+            self.assertEqual(len(data), RGB565_SIZE)
+            fallback.write_bytes(bytes(data))
+            with self.assertRaises(ValueError, msg="corrupted fallback accepted"):
+                AVA.validate_avatar_assets(root)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = copy_asset_tree(Path(directory) / "assets")
+            lines = [
+                line for line in SHA256SUMS.read_text(encoding="utf-8").splitlines()
+                if not line.endswith("  neutral.rgb565")
+            ]
+            (root / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            with self.assertRaises(ValueError, msg="fallback entry missing from SHA256SUMS"):
+                AVA.validate_avatar_assets(root)
 
 
 if __name__ == "__main__":
