@@ -10,49 +10,45 @@ reproducible `recolor_platinum.py` script. v2.1-fit is obsolete as a source. Tha
 not tracked by Git; the files needed to build live here in the board, so a clean clone is
 enough.
 
-`speaking.gif` comes from the kit's later revision, `3.1-platinum-mouth-fix`: the v3.0 one
-had two overlapping mouths. The other 11 GIFs in v3.1 are byte-identical to those in v3.0.
+`scripts/elena_avatar_refit.py` builds the 12 GIFs from the kit's final PNG `frames/`
+(revision `3.1-platinum-mouth-fix`, whose `speaking` frames have one mouth) and its master
+sheet, `source/elena_12_expressions.png`. The kit crops each panel at 320 source pixels
+although the art reaches about 360, which cut the thought bubble and the music note. The
+script restores that strip from the sheet and moves the art 16 px left, so the figure sits
+at x=4, y=30, keeping the kit's 87.5% scale. The eyes, mouth and recolor are the kit's.
 
-**Only** the 12 light GIFs from `gifs/` were copied. `gifs-hq/`, `frames/`, `keyframes/`,
-`mouths/`, `preview.png`, `sprite_sheet.*` and the viseme headers (`hg_mouth_frames.h`,
-`hg_face_layout.h`) were not: they are not inputs to this binary.
+Each GIF uses one 64-color palette taken from all its frames. The script also sets frames and
+timing for this board: `listening` is a single frame, because the microphone is being encoded
+while it shows and a redraw there competes with the encoder. The kit's `gifs-hq/`, `mouths/`,
+`preview.png`, `sprite_sheet.*` and viseme headers are not inputs to this binary.
+
+```sh
+python3 scripts/elena_avatar_refit.py --kit ../elena-chan-avatar-kit-v3-platinum
+```
 
 | File | Bytes | Frames per loop | Canvas |
 | --- | --- | --- | --- |
-| `gifs/neutral.gif` | 48110 | 2 | 320 × 240 |
-| `gifs/happy.gif` | 64260 | 3 | 320 × 240 |
-| `gifs/sad.gif` | 46516 | 2 | 320 × 240 |
-| `gifs/thinking.gif` | 71290 | 3 | 320 × 240 |
-| `gifs/sleeping.gif` | 65394 | 3 | 320 × 240 |
-| `gifs/pet.gif` | 70919 | 3 | 320 × 240 |
-| `gifs/shake.gif` | 69761 | 3 | 320 × 240 |
-| `gifs/speaking.gif` | 90833 | 3 | 320 × 240 |
-| `gifs/listening.gif` | 69932 | 3 | 320 × 240 |
-| `gifs/look_left.gif` | 73739 | 3 | 320 × 240 |
-| `gifs/look_right.gif` | 70730 | 3 | 320 × 240 |
-| `gifs/email.gif` | 70707 | 3 | 320 × 240 |
-| **Total** | **812191** | **34** | |
+| `gifs/neutral.gif` | 59897 | 2 | 320 × 240 |
+| `gifs/happy.gif` | 119253 | 4 | 320 × 240 |
+| `gifs/sad.gif` | 117934 | 4 | 320 × 240 |
+| `gifs/thinking.gif` | 127876 | 4 | 320 × 240 |
+| `gifs/sleeping.gif` | 61783 | 2 | 320 × 240 |
+| `gifs/pet.gif` | 126691 | 4 | 320 × 240 |
+| `gifs/shake.gif` | 126147 | 4 | 320 × 240 |
+| `gifs/speaking.gif` | 158909 | 5 | 320 × 240 |
+| `gifs/listening.gif` | 33073 | 1 | 320 × 240 |
+| `gifs/look_left.gif` | 127451 | 4 | 320 × 240 |
+| `gifs/look_right.gif` | 123487 | 4 | 320 × 240 |
+| `gifs/email.gif` | 163041 | 5 | 320 × 240 |
+| **Total** | **1345542** | **43** | |
 
-The 12 GIFs add up to 34 frames per loop (2–3 per file). The firmware's C decoder, run on
-the host, produces 68 frames per configuration: two loops of each GIF, with the LZW cache on
-and off, identical frame by frame between both configurations and to the first loop.
+`scripts/tests/fixtures/avatar_gif/v3-frames.json` holds hashes of every frame as composed by
+Pillow, and `test_every_v3_frame_matches_independent_compositor` requires the firmware's own
+decoder (`gifdec.c` compiled for the host, with `LV_GIF_CACHE_DECODE_DATA` at 0 and 1) to
+produce the same pixels over two loops.
 
-How this was measured (these are our own checks, not the kit's figures):
-
-- `python3 scripts/elena_avatar_assets.py manifest`: size, dimensions and image descriptor
-  count of each file, reading each GIF separately.
-- `main/display/lvgl_display/gif/gifdec.c` compiled for the host with the minimal adapters in
-  `scripts/tests/fixtures/avatar_gif/` (`lvgl.h`, `esp_log.h`, `avatar_gif_host.c`), with
-  `LV_GIF_CACHE_DECODE_DATA` at 0 and 1.
-- Independent comparison with Pillow 13.0.0 (`n_frames`, `loop`, `duration`) and with the
-  kit's own `gifs_manifest.json`: the three sources agree on v3.1, including the total of
-  812191 bytes. The first frame of all 12 GIFs, converted to RGB565 by the firmware's decoder,
-  matches Pillow's pixel by pixel when truncated to 5/6/5 bits.
-
-Durations according to each GIF (measured by reading each frame's Graphic Control
-Extension): three-frame expressions use 300, 220 and 460 ms; `neutral` and `sad`, 300 and
-680 ms; `speaking`, 230, 150 and 210 ms. They loop forever (`loop = 0`). The firmware honors
-these durations and sets no FPS of its own.
+Durations are in `GIFS` in the script. They loop forever (`loop = 0`). The firmware honors
+them and sets no FPS of its own.
 
 ## Aliases
 

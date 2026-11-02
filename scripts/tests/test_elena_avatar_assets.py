@@ -48,27 +48,26 @@ GIF_NAMES = (
     "look_right",
     "email",
 )
-TOTAL_GIF_BYTES = 812191
+TOTAL_GIF_BYTES = 1345542
 CANVAS_WIDTH = 320
 CANVAS_HEIGHT = 240
 RGB565_SIZE = CANVAS_WIDTH * CANVAS_HEIGHT * 2
-# Frames per GIF in one pass. The kit's own manifest and the firmware decoder
-# agree: 12 GIFs, 34 frames per pass, so a host decode of two passes is 68.
+# Frames per GIF in one pass, as chosen in scripts/elena_avatar_refit.py.
 FRAMES_BY_NAME = {
+    "email": 5,
+    "happy": 4,
+    "listening": 1,
+    "look_left": 4,
+    "look_right": 4,
     "neutral": 2,
-    "sad": 2,
-    "email": 3,
-    "happy": 3,
-    "listening": 3,
-    "look_left": 3,
-    "look_right": 3,
-    "pet": 3,
-    "shake": 3,
-    "sleeping": 3,
-    "speaking": 3,
-    "thinking": 3,
+    "pet": 4,
+    "sad": 4,
+    "shake": 4,
+    "sleeping": 2,
+    "speaking": 5,
+    "thinking": 4,
 }
-FRAMES_PER_PASS = 34
+FRAMES_PER_PASS = 43
 PASSES_PER_DECODE = 2
 
 

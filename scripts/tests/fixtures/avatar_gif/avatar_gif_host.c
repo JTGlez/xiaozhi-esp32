@@ -90,7 +90,8 @@ static int inspect(gd_GIF* gif) {
             fprintf(stderr, "decoder error in a gif frame\n");
             return 1;
         }
-        if (gif->f_rw_p < position_before) {
+        // "<=": a single-frame GIF rewinds to the very position it started from.
+        if (gif->f_rw_p <= position_before) {
             loop_frames[loops] = index_in_loop;
             loops++;
             index_in_loop = 0;

@@ -1,165 +1,158 @@
 {
-  "oracle": "Pillow 12.2.0: RGBA to BGRA, full composed frames; kit v3-platinum; speaking from v3.1-platinum-mouth-fix",
-  "gifs": {
-    "email": [
-      {
-        "sha256_bgra": "a00db0a28b54c796fc8643c3663c08ac60c882c6f43b6c87d437d1e077bf4c35",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "9614023557da8a5866a5f10b855cbdeba0f311768f11e136d18c6e4b71c483b7",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "c6d02dabf5c33177da59ace6bbfe1149dc510a961fc63e6c9844b567877bc500",
-        "duration_ms": 460
-      }
-    ],
-    "happy": [
-      {
-        "sha256_bgra": "2c5c0989214a800be76453c176083efaa4cb836b729ad6dec73c360d007e40a9",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "a3b6b0f8d59a69a6b0518348598ad159f82eee4f249b17fe4e4e903e0abf9439",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "3a6938747213cc84aef064fb980caa5d1c67778f4910960d0ee18878daca4f7e",
-        "duration_ms": 460
-      }
-    ],
-    "listening": [
-      {
-        "sha256_bgra": "7934f33fb4e13adc8bb61f5ab8bdaab6b5f7d4fa90212b08db15eead0e07b0ad",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "dd1489e506c35d3e30a7587dd591370e1403187490956e9d3c7ccf96631fc3cf",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "37f8fef58c4c186543c77a9e0c98081d882da26cae06942e7233fd50b79c2324",
-        "duration_ms": 460
-      }
-    ],
-    "look_left": [
-      {
-        "sha256_bgra": "5d28e8f01a9eadf38321969b9aea0acc0d5357fc2177beb63cb16719c843d4f3",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "9590beb1cea0556d627caedfda96c09a6b8b78d6ad9274dd0e96b3e9a5a6424a",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "0cd7d34b441a08923455c73d558c641fea49a23dc88065d4be3fda5b2634c5e5",
-        "duration_ms": 460
-      }
-    ],
-    "look_right": [
-      {
-        "sha256_bgra": "e8833b13e68a638cd4d6d972fc9507bc23d3901a3c72b24255682deac68a2eac",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "1587cfbbd36d3ba65e7c7005d65eaff2d4fae0d3e6497da32a20aa3aee4aa1b3",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "91c73ccffd6b44661ea54a5b1bd937aff35d57b0b8715a21846906c4344c3d8c",
-        "duration_ms": 460
-      }
-    ],
-    "neutral": [
-      {
-        "sha256_bgra": "1037f4459634475c6836634bc5decf77734379ffe7dc04af96f662164200de41",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "45f53ed4c177d0d3cea30473609bcded3f404a565e4a7ae59c76d37b046f551e",
-        "duration_ms": 680
-      }
-    ],
-    "pet": [
-      {
-        "sha256_bgra": "da6ea6d7242bd22be5da063788312a5352059d18f41023e0e959f33511656df4",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "45877b94cfef982b2983f899c691bcbe79e945b82d95c7be181a27178093a8c6",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "31b1e0af59c3c9dbec15b2cf51c462b9843f2828644aa6ea90dded60b9636554",
-        "duration_ms": 460
-      }
-    ],
-    "sad": [
-      {
-        "sha256_bgra": "4406832c07eae07e094189dc1f7d80d00806f0cfa1466617d96e728b60bd4ba3",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "8e367e476d7e8144bdeac1c9dc17ddf5fd91618cc62a58d62c1e04c41d29239c",
-        "duration_ms": 680
-      }
-    ],
-    "shake": [
-      {
-        "sha256_bgra": "11ca8ac4b8fdf5284207253ad107d31ada1b2f5f44bc9451e998843e9bd1d188",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "fc6419de2e52cfa4c4e45d5ada37726f29e7af54591cda4062e07e3a5c37b210",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "101b97d9509e579421683d291756370395a553e5ecc60290e200f66521b323d8",
-        "duration_ms": 460
-      }
-    ],
-    "sleeping": [
-      {
-        "sha256_bgra": "8fb96c71b3055da44db4bdbf3306f02ee4020946533af668927f603df882680e",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "43573ca97c853b0f4af47fb7ef6f366b22f74d1165542dc95c44bad6338dba77",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "3ee93e2824175176efc18ab4ee64dd004371918de8f13ba1d9eb2c3e3e731287",
-        "duration_ms": 460
-      }
-    ],
-    "speaking": [
-      {
-        "sha256_bgra": "bc5e136e60f2360dddcca2bc58d8cc12742f6dff7b3409d3b8fe705ad269018b",
-        "duration_ms": 230
-      },
-      {
-        "sha256_bgra": "3d08944b92cc68f85a32afb9a7c637f15719d7396a2be634b8202ea3ba4b8121",
-        "duration_ms": 150
-      },
-      {
-        "sha256_bgra": "cf809fd5703cbf29500af06922805d5792eb05be4d63854b50120d018e94ddb1",
-        "duration_ms": 210
-      }
-    ],
-    "thinking": [
-      {
-        "sha256_bgra": "b5ab14360a5750c4e4386773d593b60dc3d9253692c5ecaa59127df15e6e6e74",
-        "duration_ms": 300
-      },
-      {
-        "sha256_bgra": "54159f2e3f492a0f37574384bebac64a94b6d0baf3af70b7956b457156950b9f",
-        "duration_ms": 220
-      },
-      {
-        "sha256_bgra": "1118c4075029d11391b8d33340e8d380c3ffe5a86df9287c74eba1d239fa5420",
-        "duration_ms": 460
-      }
-    ]
-  }
+ "oracle": "Pillow 12.2.0: RGBA to BGRA, full composed frames; elena_avatar_refit.py output",
+ "gifs": {
+  "email": [
+   {
+    "sha256_bgra": "d09e7be424cd6860677927b5eded0429daa10830957deedfa40416ccb219bab2"
+   },
+   {
+    "sha256_bgra": "aad7462c468114278ea6592eae8b3b23de10e85d0b565e177130f0079e568b04"
+   },
+   {
+    "sha256_bgra": "2fd7c48037f1a5a16c69e7fe1a3f7539539278c01631090ae3a3016c5e242d50"
+   },
+   {
+    "sha256_bgra": "1d1d3594484c7997a940a961f33487557eea5d6e06906e3cbc5f2615006f057e"
+   },
+   {
+    "sha256_bgra": "765f23f5cf74fcf4e221b884b8d217235831b94e419d0fec149595570f449948"
+   }
+  ],
+  "happy": [
+   {
+    "sha256_bgra": "94416b5af1a3d6f317f9e90224b3063ff6a86549e9d77f054e22c5fa723dd0f0"
+   },
+   {
+    "sha256_bgra": "a741fae0d90fe2642cded2adc6f0c0ffec4d935287eb7804676bf020daa5bfa0"
+   },
+   {
+    "sha256_bgra": "b75f9e4843e10b0fefe569030e92ba894d3a3a64fc14036b34d2b957cf6caf9d"
+   },
+   {
+    "sha256_bgra": "a741fae0d90fe2642cded2adc6f0c0ffec4d935287eb7804676bf020daa5bfa0"
+   }
+  ],
+  "listening": [
+   {
+    "sha256_bgra": "1c445f66a341a9e73a4c1910228d7d4b55d39cb8308032f8c4bda5cc383e4041"
+   }
+  ],
+  "look_left": [
+   {
+    "sha256_bgra": "6adc66880e50687f7d816ba65ded540d5a4d2c18ea2c35fd0401d75254a4c7bd"
+   },
+   {
+    "sha256_bgra": "fe172db78657d0bb10e69a2f0a2876158457ad44d2c8eb9150c391fbd9f97112"
+   },
+   {
+    "sha256_bgra": "99576dc188348b17737a6c3d8ba701cb604cc2f5f41ac7e6ac4b399765de0840"
+   },
+   {
+    "sha256_bgra": "6adc66880e50687f7d816ba65ded540d5a4d2c18ea2c35fd0401d75254a4c7bd"
+   }
+  ],
+  "look_right": [
+   {
+    "sha256_bgra": "5263d852d5f6e2703b3c4ebf36274de221032df8d2e8d5a7db262789bdbeec16"
+   },
+   {
+    "sha256_bgra": "c5655db1b611009b6d31018afc2204560478408d694cfe2db2592f016b45648b"
+   },
+   {
+    "sha256_bgra": "caf569662c248f19fd382a5719c611778783d9c3623747677cd5dfd01fcfb0fa"
+   },
+   {
+    "sha256_bgra": "5263d852d5f6e2703b3c4ebf36274de221032df8d2e8d5a7db262789bdbeec16"
+   }
+  ],
+  "neutral": [
+   {
+    "sha256_bgra": "600d3472d2a1b7a09ae66f9ccfca731e4ef4a9a61d625339b795d3048b661c63"
+   },
+   {
+    "sha256_bgra": "c8a0a42be1db666d373d868046f9a876f11d402007c56278273a2e2bbccc4bf9"
+   }
+  ],
+  "pet": [
+   {
+    "sha256_bgra": "11e5442e2a993731d46a2d9e7b8d38facf8f85c5072dc5f634185c0899410f24"
+   },
+   {
+    "sha256_bgra": "bfa940a8dc146845fbe2ee4b8726ee59cc4be95125b50d90a91eaeb8e1f3db16"
+   },
+   {
+    "sha256_bgra": "e1174c566d306e753ab181412488188c36b2ce41020f55901fa0a9b9ae15a4bf"
+   },
+   {
+    "sha256_bgra": "bfa940a8dc146845fbe2ee4b8726ee59cc4be95125b50d90a91eaeb8e1f3db16"
+   }
+  ],
+  "sad": [
+   {
+    "sha256_bgra": "217be5471939b197ffc444da4227174a1523de62dc766e66d23decaa7ca445a2"
+   },
+   {
+    "sha256_bgra": "1a5b9a11eb18fcd48e61ebb6b2a6935b8cf4237b70b1eb1d7dfe499b18e39fba"
+   },
+   {
+    "sha256_bgra": "7b6aa27322ec5775fd4f9ffb635e32814b73bba0c836dff1e8376deece7922a2"
+   },
+   {
+    "sha256_bgra": "1a5b9a11eb18fcd48e61ebb6b2a6935b8cf4237b70b1eb1d7dfe499b18e39fba"
+   }
+  ],
+  "shake": [
+   {
+    "sha256_bgra": "25c065b5e50cbc5a080e41cc74860434678d1d135ef4d7176371ff62cc2e768b"
+   },
+   {
+    "sha256_bgra": "542298a84a9d4e39d097f10367f5e64676e776dff6d7d8cca858d503a398edbf"
+   },
+   {
+    "sha256_bgra": "1aebc532744edc7b14add28ecd5bbf2782f39ab39bcfdac95da1cb3ff0afea30"
+   },
+   {
+    "sha256_bgra": "82721cdcac43c1baf49d7416a61fcb0b32b9e52a66222cff43c52c0bc0354135"
+   }
+  ],
+  "sleeping": [
+   {
+    "sha256_bgra": "ddae68e219c16bdbb3ca83ce31eebc7bd505144d24cd95a95d5a36fcddfff340"
+   },
+   {
+    "sha256_bgra": "c17f68d57053f5681811b9be0a7a0180687937e98f820c35e7bfa4c29fc84699"
+   }
+  ],
+  "speaking": [
+   {
+    "sha256_bgra": "380eda840a07e7e9af4978671ac4a1bbc39e0ac0930ffc9880fa92ed0b1b9cc7"
+   },
+   {
+    "sha256_bgra": "25c0614df17b8a8564200cc37ea9c45f90b5060ed8a008633a44c6bb7f026c59"
+   },
+   {
+    "sha256_bgra": "81baabf9297ae1a137a757e300e0252421ddc8d0c1c956fd49dcdfbf97145a3b"
+   },
+   {
+    "sha256_bgra": "73fb753c9156d899da194861e1dd31609c091aa95af36fd4baf69bcc76141d63"
+   },
+   {
+    "sha256_bgra": "da7508d3c13179dbd1fa37dc11bc6d2af870de6e3b1193ebe35c042ae84a6821"
+   }
+  ],
+  "thinking": [
+   {
+    "sha256_bgra": "7da1dc2669b88b16971fa34afb899d82eda81ac28ae3f1925f622180af3a9288"
+   },
+   {
+    "sha256_bgra": "5f081d1fa7a34cea025bc4a4115a5c29ecb3afeb7e4313e4088421e8cd6931bc"
+   },
+   {
+    "sha256_bgra": "3398d0518dc2a16d68fe4de10af3b6e3a4533f36f5c933930ef2d59ece9113da"
+   },
+   {
+    "sha256_bgra": "c54173eabacb18048e49753ddebd1e30c339448d75993d629d939c6032b7117c"
+   }
+  ]
+ }
 }

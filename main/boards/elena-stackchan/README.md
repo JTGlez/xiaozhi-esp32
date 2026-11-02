@@ -12,10 +12,10 @@ make firmware-image PURPOSE="elena avatar conversation"
 make firmware-image BOARD=m5stack/core-s3 BOARD_VARIANT=m5stack-core-s3 PURPOSE="generic comparison"
 ```
 
-The avatar uses the original 320×240 kit v3 light GIFs without scaling. Battery,
-mute and connection indicators share a transparent top strip. Conversation
-captions and the clock stay hidden. Operational notices and explicit previews
-retain their owners. One GIF decoder is used at a time; unavailable resources
+The avatar's 320×240 GIFs are built by `scripts/elena_avatar_refit.py`. A transparent top
+strip holds the state text on the left and the battery, mute and connection indicators on
+the right. Conversation captions and the clock stay hidden. Operational notices use a second
+strip below it, and they and explicit previews retain their owners. One GIF decoder is used at a time; unavailable resources
 fall back once to neutral, then to the static RGB565 image in application flash.
 The generated header includes expected GIF sizes and CRCs, so damaged payloads
 never enter the decoder's unbounded raw-memory API. Resources, integrity data
