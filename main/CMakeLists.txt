@@ -929,6 +929,7 @@ file(GLOB BOARD_SOURCES
 if(AVATAR_RENDERER STREQUAL "image")
     list(FILTER BOARD_SOURCES EXCLUDE REGEX "/(elena_avatar_display|avatar_controller)\\.cc$")
 endif()
+list(FILTER BOARD_SOURCES EXCLUDE REGEX "/(gif_avatar_renderer|gif_avatar_factory|image_avatar_renderer|image_avatar_factory)\\.cc$")
 list(APPEND SOURCES ${BOARD_SOURCES})
 
 # Select one audio engine for each chip family
