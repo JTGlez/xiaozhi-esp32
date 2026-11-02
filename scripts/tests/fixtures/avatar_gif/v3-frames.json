@@ -1,5 +1,5 @@
 {
-  "oracle": "Pillow 12.2.0: RGBA to BGRA, full composed frames; kit v3-platinum",
+  "oracle": "Pillow 12.2.0: RGBA to BGRA, full composed frames; kit v3-platinum; speaking from v3.1-platinum-mouth-fix",
   "gifs": {
     "email": [
       {
@@ -135,16 +135,16 @@
     ],
     "speaking": [
       {
-        "sha256_bgra": "f13c8ef8721e048ab1cab4b2bd5eb0bd6fc58b6f7d810e61a1ffef158c4ace97",
-        "duration_ms": 140
+        "sha256_bgra": "bc5e136e60f2360dddcca2bc58d8cc12742f6dff7b3409d3b8fe705ad269018b",
+        "duration_ms": 230
       },
       {
-        "sha256_bgra": "422d116d205940b23b5b5c1eeca4b5bb0a6bdcc60edcbfa095ca7da2c423dccd",
+        "sha256_bgra": "3d08944b92cc68f85a32afb9a7c637f15719d7396a2be634b8202ea3ba4b8121",
         "duration_ms": 150
       },
       {
-        "sha256_bgra": "39e47b986d19c38cf3b2ddae18e82a4713cca2853d4113a0bc159613385ff465",
-        "duration_ms": 180
+        "sha256_bgra": "cf809fd5703cbf29500af06922805d5792eb05be4d63854b50120d018e94ddb1",
+        "duration_ms": 210
       }
     ],
     "thinking": [

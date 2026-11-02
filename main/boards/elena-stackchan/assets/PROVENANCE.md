@@ -11,6 +11,10 @@ cálido a platinado frío con sombras gris-lila, mediante el script reproducible
 carpeta no está seguida por Git; los archivos necesarios para compilar viven
 aquí dentro de la placa, de modo que una clonación limpia basta.
 
+`speaking.gif` viene de la revisión posterior del kit, `3.1-platinum-mouth-fix`: la de v3.0
+tenía dos bocas superpuestas. Los otros 11 GIFs de v3.1 son idénticos byte a byte a los de
+v3.0.
+
 Se copiaron **solo** los 12 GIFs ligeros de `gifs/`. No se copiaron `gifs-hq/`,
 `frames/`, `keyframes/`, `mouths/`, `preview.png`, `sprite_sheet.*`, ni los cabezales de
 visemas (`hg_mouth_frames.h`, `hg_face_layout.h`): no son entradas del binario de esta
@@ -25,12 +29,12 @@ entrega.
 | `gifs/sleeping.gif` | 65394 | 3 | 320 × 240 |
 | `gifs/pet.gif` | 70919 | 3 | 320 × 240 |
 | `gifs/shake.gif` | 69761 | 3 | 320 × 240 |
-| `gifs/speaking.gif` | 74352 | 3 | 320 × 240 |
+| `gifs/speaking.gif` | 90833 | 3 | 320 × 240 |
 | `gifs/listening.gif` | 69932 | 3 | 320 × 240 |
 | `gifs/look_left.gif` | 73739 | 3 | 320 × 240 |
 | `gifs/look_right.gif` | 70730 | 3 | 320 × 240 |
 | `gifs/email.gif` | 70707 | 3 | 320 × 240 |
-| **Total** | **795710** | **34** | |
+| **Total** | **812191** | **34** | |
 
 Los 12 GIFs suman 34 cuadros por vuelta (2–3 por archivo). El decodificador C del
 firmware ejecutado en el ordenador produce 68 cuadros por configuración: dos vueltas de
@@ -45,14 +49,14 @@ Cómo se midió (no son cifras del kit, son comprobaciones propias):
   mínimos de `scripts/tests/fixtures/avatar_gif/` (`lvgl.h`, `esp_log.h`,
   `avatar_gif_host.c`), con `LV_GIF_CACHE_DECODE_DATA` a 0 y a 1.
 - Contraste independiente con Pillow 13.0.0 (`n_frames`, `loop`, `duration`) y con
-  `gifs_manifest.json` del propio kit: las tres fuentes coinciden en v3, incluido el
-  total de 795710 bytes. El primer cuadro de los 12 GIFs convertido a RGB565 por el
+  `gifs_manifest.json` del propio kit: las tres fuentes coinciden en v3.1, incluido el
+  total de 812191 bytes. El primer cuadro de los 12 GIFs convertido a RGB565 por el
   decodificador del firmware coincide píxel a píxel con el de Pillow truncando a
   5/6/5 bits, en los 12 archivos.
 
-Duraciones según el GIF (medidas en v3 leyendo el Graphic Control Extension de cada
+Duraciones según el GIF (medidas leyendo el Graphic Control Extension de cada
 cuadro): las expresiones de tres cuadros usan 300, 220 y 460 ms; `neutral` y `sad`,
-300 y 680 ms; `speaking`, 140, 150 y 180 ms. Bucle infinito (`loop = 0`). El firmware
+300 y 680 ms; `speaking`, 230, 150 y 210 ms. Bucle infinito (`loop = 0`). El firmware
 respeta esas duraciones; no se fija un FPS propio.
 
 ## Alias
