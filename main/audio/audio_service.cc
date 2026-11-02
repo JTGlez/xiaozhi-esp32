@@ -616,6 +616,19 @@ bool AudioService::PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket> pa
                        audio_decode_queue_.size() < MAX_DECODE_PACKETS_IN_QUEUE;
             });
         } else {
+            /* Incoming voice is lost here, and nothing else reports it. Log outside
+             * the lock, at most once per second, as the encode queue does. */
+            const uint32_t dropped_total = ++debug_statistics_.decode_drop_count;
+            const int64_t now = esp_timer_get_time();
+            const bool should_log = now - last_decode_drop_log_time_ >= 1000000;
+            if (should_log) {
+                last_decode_drop_log_time_ = now;
+            }
+            lock.unlock();
+            if (should_log) {
+                ESP_LOGW(TAG, "Decode queue is full, dropping incoming audio (dropped %lu so far)",
+                         (unsigned long)dropped_total);
+            }
             return false;
         }
     }
