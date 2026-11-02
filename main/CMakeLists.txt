@@ -15,6 +15,7 @@ set(SOURCES "audio/audio_codec.cc"
             "led/circular_strip.cc"
             "led/gpio_led.cc"
             "display/display.cc"
+            "display/conversation_visual_session.cc"
             "display/text_glyph.cc"
             "display/lcd_display.cc"
             "display/oled_display.cc"
@@ -228,6 +229,13 @@ elseif(CONFIG_BOARD_TYPE_M5STACK_CORE_P4)
     set(BUILTIN_TEXT_FONT font_noto_sans_basic_30_4)
     set(BUILTIN_ICON_FONT font_material_symbols_30_4)
     set(DEFAULT_EMOJI_COLLECTION noto-color-emoji_64)
+elseif(CONFIG_BOARD_TYPE_ELENA_STACKCHAN)
+    set(BOARD_DIR "elena-stackchan")
+    set(BUILTIN_TEXT_FONT font_noto_sans_basic_20_4)
+    set(BUILTIN_ICON_FONT font_material_symbols_16_4)
+    set(DEFAULT_EMOJI_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/gifs")
+    set(DEFAULT_EMOJI_ALIASES "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/aliases.json")
+    list(APPEND SOURCES "boards/m5stack/core-s3/cores3_audio_codec.cc")
 elseif(CONFIG_BOARD_TYPE_M5STACK_CORE_S3)
     set(BOARD_DIR "m5stack/core-s3")
     set(BUILTIN_TEXT_FONT font_noto_sans_basic_20_4)
@@ -1088,6 +1096,21 @@ if(CONFIG_BOARD_TYPE_ESP32_P4_FUNCTION_EV_BOARD)
         sdmmc
     )
 endif()
+if(CONFIG_BOARD_TYPE_ELENA_STACKCHAN)
+    set(ELENA_FALLBACK_HEADER "${CMAKE_CURRENT_BINARY_DIR}/elena_avatar_fallback.h")
+    file(GLOB ELENA_HEADER_GIFS CONFIGURE_DEPENDS "${DEFAULT_EMOJI_DIRECTORY}/*.gif")
+    add_custom_command(OUTPUT "${ELENA_FALLBACK_HEADER}"
+        COMMAND python "${PROJECT_DIR}/scripts/elena_avatar_assets.py" header
+            --rgb565 "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/neutral.rgb565"
+            --out "${ELENA_FALLBACK_HEADER}"
+        DEPENDS "${PROJECT_DIR}/scripts/elena_avatar_assets.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/neutral.rgb565"
+                ${ELENA_HEADER_GIFS}
+        VERBATIM)
+    list(APPEND SOURCES "${ELENA_FALLBACK_HEADER}")
+    list(APPEND INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
@@ -1166,6 +1189,11 @@ if(NOT CMAKE_BUILD_EARLY_EXPANSION)
     endif()
 endif()
 
+# Rewritten only when the language changes, so the header below is rebuilt then:
+# the new language's JSON is usually older than the header it must replace.
+set(LANG_STAMP "${CMAKE_CURRENT_BINARY_DIR}/lang_dir.stamp")
+file(CONFIGURE OUTPUT "${LANG_STAMP}" CONTENT "${LANG_DIR}\n" @ONLY)
+
 # Add generation rules
 add_custom_command(
     OUTPUT ${LANG_HEADER}
@@ -1174,6 +1202,7 @@ add_custom_command(
             --output "${LANG_HEADER}"
     DEPENDS
         ${LANG_JSON}
+        ${LANG_STAMP}
         ${PROJECT_DIR}/scripts/gen_lang.py
     COMMENT "Generating ${LANG_DIR} language config"
 )
@@ -1311,6 +1340,13 @@ function(build_default_assets_bin)
             "${NOTO_FONTS_PATH}/png/${DEFAULT_EMOJI_COLLECTION}/*"
         )
         list(APPEND DEFAULT_ASSETS_DEPENDENCIES ${DEFAULT_EMOJI_FILES})
+    endif()
+
+    if(DEFAULT_EMOJI_DIRECTORY)
+        list(APPEND BUILD_ARGS "--emoji_directory" "${DEFAULT_EMOJI_DIRECTORY}"
+                               "--emoji_aliases" "${DEFAULT_EMOJI_ALIASES}")
+        file(GLOB ELENA_GIFS CONFIGURE_DEPENDS "${DEFAULT_EMOJI_DIRECTORY}/*.gif")
+        list(APPEND DEFAULT_ASSETS_DEPENDENCIES ${ELENA_GIFS} "${DEFAULT_EMOJI_ALIASES}")
     endif()
 
     # Add default assets extra files if defined

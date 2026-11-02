@@ -1,6 +1,7 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
+#include "conversation_visual.h"
 #include "emoji_collection.h"
 #include "text_glyph.h"
 
@@ -56,6 +57,8 @@ public:
     virtual void SetupUI() { setup_ui_called_ = true; }
     virtual bool IsMonochrome() const { return false; }
     virtual bool SupportsGuiOperations() const { return false; }
+    virtual bool SupportsConversationVisuals() const { return false; }
+    virtual void OnConversationVisualEvent(const ConversationVisualEvent& event) { (void)event; }
     virtual void SetHideSubtitle(bool hide) { (void)hide; }
     virtual bool InsertAnimDialog(const char* name, uint32_t duration_ms) {
         (void)name;

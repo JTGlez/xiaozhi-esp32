@@ -11,6 +11,7 @@
 #include <deque>
 #include <memory>
 #include <functional>
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "audio_service.h"
 #include "device_state.h"
 #include "device_state_machine.h"
+#include "display/conversation_visual_session.h"
 #include "notify/notify_player.h"
 
 // Main event bits
@@ -36,6 +38,7 @@
 #define MAIN_EVENT_STOP_LISTENING       (1 << 11)
 #define MAIN_EVENT_STATE_CHANGED        (1 << 12)
 #define MAIN_EVENT_PLAYBACK_DRAINED     (1 << 13)
+#define MAIN_EVENT_CONVERSATION_VISUAL  (1 << 14)
 
 
 enum AecMode {
@@ -154,6 +157,20 @@ private:
     int clock_ticks_ = 0;
     TaskHandle_t activation_task_handle_ = nullptr;
 
+
+    // Conversation visuals; inert unless the display supports them
+    void DispatchConversationVisualEvent(const ConversationVisualEvent& event);
+    void BeginConversationVisualTurn();
+    void CancelConversationVisualTurn();
+    void PollConversationVisuals();
+    ConversationVisualSession conversation_visual_session_;
+    bool conversation_visuals_enabled_ = false;
+    esp_timer_handle_t conversation_visual_timer_ = nullptr;
+    TaskHandle_t main_task_handle_ = nullptr;
+    std::atomic<bool> visual_capture_started_{false};
+    std::atomic<uint32_t> visual_capture_generation_{0};
+    std::atomic<uint32_t> visual_notification_id_{0};
+    std::atomic<uint32_t> visual_notification_generation_{0};
 
     // Event handlers
     void HandleStateChangedEvent();

@@ -1,0 +1,158 @@
+{
+ "oracle": "Pillow 12.2.0: RGBA to BGRA, full composed frames; elena_avatar_refit.py output",
+ "gifs": {
+  "email": [
+   {
+    "sha256_bgra": "3f9f10725e684678026b3359305772c161d75aa19c11d842dde40522839ee2b5"
+   },
+   {
+    "sha256_bgra": "19b09db2b9bf263e74883bbce0d210bd9303cfc6d18121ffd30cef3134be12e0"
+   },
+   {
+    "sha256_bgra": "7913e8a5849445d9087498fcadf65e5f8f792d807273fdb3ea7da246888b1199"
+   },
+   {
+    "sha256_bgra": "d158dfc38b568145869cbafb9bdcff86bd3cc388c2c0ac73f4a0173645c1b478"
+   },
+   {
+    "sha256_bgra": "0645d228986f937fd6f9209b14f039dc14e6873892750735c7447ebe8526773f"
+   }
+  ],
+  "happy": [
+   {
+    "sha256_bgra": "a50c8883974fbe01b513aed38ecfae1411edb053c3131743adcd26f42e67a3ad"
+   },
+   {
+    "sha256_bgra": "6df9d85533b642235a92769b8f0598764bd79a2b2b0915e1d86bd5142c0d4d11"
+   },
+   {
+    "sha256_bgra": "6547bb74f3dde1a4ecdf821e8bb6d65df98c0c6d6c0a9dde006f1d932afcff85"
+   },
+   {
+    "sha256_bgra": "6df9d85533b642235a92769b8f0598764bd79a2b2b0915e1d86bd5142c0d4d11"
+   }
+  ],
+  "listening": [
+   {
+    "sha256_bgra": "d4d4c3aacdec506aad0b8900bed5e63f48c3ff9f9ca2720d970dccd5197f1c3b"
+   }
+  ],
+  "look_left": [
+   {
+    "sha256_bgra": "6b7ff508f41b16271cb215e021c2f009df3c88368d3ce791a9ea7d93dd8483c0"
+   },
+   {
+    "sha256_bgra": "489fade659ef5bf63b075e1b2e60a6ad083766728f3e84a8c4543e282f4fd484"
+   },
+   {
+    "sha256_bgra": "b59c5ea92977f0e59cadbc39d81021ad4d4253f126bbf96cbb59ab58e7172447"
+   },
+   {
+    "sha256_bgra": "6b7ff508f41b16271cb215e021c2f009df3c88368d3ce791a9ea7d93dd8483c0"
+   }
+  ],
+  "look_right": [
+   {
+    "sha256_bgra": "890dab59cd0408429188c0362710cbebba5b16ac3f9dbcef6bc402f9c2dda480"
+   },
+   {
+    "sha256_bgra": "199a2782299aa2b4c2c35920ea879d990a87213c35b5beae49241fbd7e2a11a9"
+   },
+   {
+    "sha256_bgra": "6491b5cd3467f66a0fb76ebdefd3e56cefd9d8436481c974c399d2ad95e7049f"
+   },
+   {
+    "sha256_bgra": "890dab59cd0408429188c0362710cbebba5b16ac3f9dbcef6bc402f9c2dda480"
+   }
+  ],
+  "neutral": [
+   {
+    "sha256_bgra": "a3462be3fd798d47b32140ba9a8e4e77d2ce65047911355f7690547b64d9389f"
+   },
+   {
+    "sha256_bgra": "33840164f35dc9177ed7ea2fc446f797fdabff1ce2d90ce6c3ba1423ceb1440a"
+   }
+  ],
+  "pet": [
+   {
+    "sha256_bgra": "f2c76228893f00537171e51e6c649e96555a62ae7cd01fffc1680843471d4242"
+   },
+   {
+    "sha256_bgra": "bc00b7265e08d951a42abeef7ed09560618b39a72b722dc842954527939aa2b8"
+   },
+   {
+    "sha256_bgra": "80687a479a2c3998c6b3ce231b0ae87552855c485611b7865968a7ea90a52d8e"
+   },
+   {
+    "sha256_bgra": "bc00b7265e08d951a42abeef7ed09560618b39a72b722dc842954527939aa2b8"
+   }
+  ],
+  "sad": [
+   {
+    "sha256_bgra": "b346b62dba1f4c1ae1705d5bee76a26916fa09aac0a16416754fe27ba48c52ee"
+   },
+   {
+    "sha256_bgra": "69c26f9795777ad1d72e3c7c5cd5ba00048a0672db9c79e4969b13cd55320afb"
+   },
+   {
+    "sha256_bgra": "e3e566cd0ce44d0795137de5529dab12489459b87d716f5e30e8a92942302358"
+   },
+   {
+    "sha256_bgra": "69c26f9795777ad1d72e3c7c5cd5ba00048a0672db9c79e4969b13cd55320afb"
+   }
+  ],
+  "shake": [
+   {
+    "sha256_bgra": "647d55860c54ff94e536a13c3597c70be3d91bae63a566f9fab2c869781eec0f"
+   },
+   {
+    "sha256_bgra": "748332c5b280f7b6459f7a55da31729113772e7b4b94d4e85b254278309a0f1f"
+   },
+   {
+    "sha256_bgra": "e5400a8818fc76b2f338293e7e0c7bb02e274052cf2db6ed5c19b377e79e4b7c"
+   },
+   {
+    "sha256_bgra": "ac46398e7c2f84bfd2eb3bc5d69796f015ee7292867b11823ea1f6972e43d62f"
+   }
+  ],
+  "sleeping": [
+   {
+    "sha256_bgra": "7df654f73adb7925c52e2dd0ba9d30e116e34e29c5c770e9ceccc0ea9940a283"
+   },
+   {
+    "sha256_bgra": "6906e5d1cbf6cfa4cd831e15418e7916ffadb75ff13059963219a691ab278982"
+   }
+  ],
+  "speaking": [
+   {
+    "sha256_bgra": "5e98a65000e5c57e36429fb1bb6e4232df83b705045ec6611465d129405110a1"
+   },
+   {
+    "sha256_bgra": "abc8445fcfb3831d40b334ad1ab74992697beb8d23484f97376ff16adad65efd"
+   },
+   {
+    "sha256_bgra": "f3efb8061ea1e2a6a7851bc01e00d88865ef697f0428fb573d61047e8a6a928c"
+   },
+   {
+    "sha256_bgra": "564f3006f8be68b9c0dd7deb6ed35955254d87da9bcac599d33078f1134a8e1d"
+   },
+   {
+    "sha256_bgra": "3ce8f8344fbae19ac7c90ad72d13354fb13cb032d01f20b3d5f847a405e0f3e1"
+   }
+  ],
+  "thinking": [
+   {
+    "sha256_bgra": "e272c75b913d05c4277b1f2144bd5c336e5998f7e15447cd9119aa2684a43f95"
+   },
+   {
+    "sha256_bgra": "867f762fcae8fd6d0b23c14ad01d7097bb4523701bd377f15e43b34b5a23491c"
+   },
+   {
+    "sha256_bgra": "7d012952cd6eb7c6572e8c67ef7d8c9c4b70b825d660517868c27776cd4edf60"
+   },
+   {
+    "sha256_bgra": "1308a432839fb25cea9c84a16fff7a5fe31049cb6bf5ca77eb000c9c8ce554e4"
+   }
+  ]
+ }
+}

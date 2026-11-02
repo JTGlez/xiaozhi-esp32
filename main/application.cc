@@ -21,6 +21,10 @@
 
 #define TAG "Application"
 
+namespace {
+uint64_t VisualNowMs() { return static_cast<uint64_t>(esp_timer_get_time()) / 1000; }
+}  // namespace
+
 Application::Application() : notify_player_(audio_service_) {
     event_group_ = xEventGroupCreate();
 
@@ -49,6 +53,10 @@ Application::Application() : notify_player_(audio_service_) {
 
 Application::~Application() {
     notify_player_.Stop();
+    if (conversation_visual_timer_ != nullptr) {
+        esp_timer_stop(conversation_visual_timer_);
+        esp_timer_delete(conversation_visual_timer_);
+    }
     if (clock_timer_handle_ != nullptr) {
         esp_timer_stop(clock_timer_handle_);
         esp_timer_delete(clock_timer_handle_);
@@ -59,12 +67,30 @@ Application::~Application() {
 bool Application::SetDeviceState(DeviceState state) { return state_machine_.TransitionTo(state); }
 
 void Application::Initialize() {
+    main_task_handle_ = xTaskGetCurrentTaskHandle();
     auto& board = Board::GetInstance();
     SetDeviceState(kDeviceStateStarting);
 
     // Setup the display
     auto display = board.GetDisplay();
     display->SetupUI();
+    conversation_visuals_enabled_ = display->SupportsConversationVisuals();
+    conversation_visual_session_.Configure(conversation_visuals_enabled_,
+                                           [display](const ConversationVisualEvent& event) {
+                                               display->OnConversationVisualEvent(event);
+                                           });
+    if (conversation_visuals_enabled_) {
+        esp_timer_create_args_t args = {};
+        args.callback = [](void* arg) {
+            auto app = static_cast<Application*>(arg);
+            xEventGroupSetBits(app->event_group_, MAIN_EVENT_CONVERSATION_VISUAL);
+        };
+        args.arg = this;
+        args.name = "conversation_visual";
+        args.skip_unhandled_events = true;
+        ESP_ERROR_CHECK(esp_timer_create(&args, &conversation_visual_timer_));
+        ESP_ERROR_CHECK(esp_timer_start_periodic(conversation_visual_timer_, 50000));
+    }
     // Print board name/version info
     display->SetChatMessage("system", SystemInfo::GetUserAgent().c_str());
 
@@ -83,6 +109,10 @@ void Application::Initialize() {
         xEventGroupSetBits(event_group_, MAIN_EVENT_WAKE_WORD_DETECTED);
     };
     callbacks.on_vad_change = [this](bool speaking) {
+        if (conversation_visuals_enabled_ && speaking) {
+            visual_capture_generation_.store(conversation_visual_session_.generation());
+            visual_capture_started_.store(true);
+        }
         xEventGroupSetBits(event_group_, MAIN_EVENT_VAD_CHANGE);
     };
     callbacks.on_playback_drained = [this]() {
@@ -90,6 +120,10 @@ void Application::Initialize() {
     };
     callbacks.on_playback_progress = [this](uint32_t playback_id, uint32_t media_position_ms) {
         notify_player_.OnPlaybackProgress(playback_id, media_position_ms);
+        if (conversation_visuals_enabled_ && playback_id == visual_notification_id_.load()) {
+            conversation_visual_session_.NoteAudioActivity(visual_notification_generation_.load(),
+                                                           VisualNowMs());
+        }
     };
     audio_service_.SetCallbacks(callbacks);
 
@@ -182,12 +216,13 @@ void Application::Run() {
         MAIN_EVENT_VAD_CHANGE | MAIN_EVENT_CLOCK_TICK | MAIN_EVENT_ERROR |
         MAIN_EVENT_NETWORK_CONNECTED | MAIN_EVENT_NETWORK_DISCONNECTED | MAIN_EVENT_TOGGLE_CHAT |
         MAIN_EVENT_START_LISTENING | MAIN_EVENT_STOP_LISTENING | MAIN_EVENT_ACTIVATION_DONE |
-        MAIN_EVENT_STATE_CHANGED | MAIN_EVENT_PLAYBACK_DRAINED;
+        MAIN_EVENT_STATE_CHANGED | MAIN_EVENT_PLAYBACK_DRAINED | MAIN_EVENT_CONVERSATION_VISUAL;
 
     while (true) {
         auto bits = xEventGroupWaitBits(event_group_, ALL_EVENTS, pdTRUE, pdFALSE, portMAX_DELAY);
 
         if (bits & MAIN_EVENT_ERROR) {
+            CancelConversationVisualTurn();
             if (GetDeviceState() == kDeviceStateNotifying) {
                 StopNotification();
             }
@@ -210,6 +245,10 @@ void Application::Run() {
 
         if (bits & MAIN_EVENT_STATE_CHANGED) {
             HandleStateChangedEvent();
+        }
+
+        if (bits & (MAIN_EVENT_PLAYBACK_DRAINED | MAIN_EVENT_CONVERSATION_VISUAL)) {
+            PollConversationVisuals();
         }
 
         if (bits & MAIN_EVENT_PLAYBACK_DRAINED) {
@@ -256,6 +295,14 @@ void Application::Run() {
         }
 
         if (bits & MAIN_EVENT_VAD_CHANGE) {
+            if (conversation_visuals_enabled_ && visual_capture_started_.exchange(false) &&
+                conversation_visual_session_.Accepts(visual_capture_generation_.load()) &&
+                listening_mode_ == kListeningModeRealtime &&
+                audio_service_.IsAudioProcessorRunning() &&
+                (GetDeviceState() == kDeviceStateListening ||
+                 GetDeviceState() == kDeviceStateSpeaking)) {
+                BeginConversationVisualTurn();
+            }
             if (GetDeviceState() == kDeviceStateListening) {
                 auto led = Board::GetInstance().GetLed();
                 led->OnStateChanged();
@@ -314,6 +361,7 @@ void Application::HandleNetworkConnectedEvent() {
 }
 
 void Application::HandleNetworkDisconnectedEvent() {
+    CancelConversationVisualTurn();
     // Close current conversation when network disconnected
     auto state = GetDeviceState();
     if (state == kDeviceStateNotifying) {
@@ -331,6 +379,9 @@ void Application::HandleNetworkDisconnectedEvent() {
 }
 
 void Application::HandleActivationDoneEvent() {
+    conversation_visual_session_.SetActivity(ConversationActivity::Idle, VisualNowMs());
+    DispatchConversationVisualEvent(conversation_visual_session_.MakeEvent(
+        ConversationVisualEventKind::NoticeCleared, VisualNowMs()));
     ESP_LOGI(TAG, "Activation done");
 
     SystemInfo::PrintHeapStats();
@@ -553,12 +604,19 @@ void Application::InitializeProtocol() {
 
     protocol_->OnIncomingAudio([this](std::unique_ptr<AudioStreamPacket> packet) {
         if (GetDeviceState() == kDeviceStateSpeaking) {
-            audio_service_.PushPacketToDecodeQueue(std::move(packet));
+            const auto generation = conversation_visual_session_.generation();
+            if (audio_service_.PushPacketToDecodeQueue(std::move(packet)) &&
+                conversation_visuals_enabled_) {
+                conversation_visual_session_.NoteAudioActivity(generation, VisualNowMs());
+            }
         }
     });
 
     protocol_->OnAudioChannelOpened([this, codec, &board]() {
         board.SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
+        // Only MQTT reports OnConnected; on WebSocket the alert would never clear.
+        if (conversation_visuals_enabled_)
+            DismissAlert();
         if (protocol_->server_sample_rate() != codec->output_sample_rate()) {
             ESP_LOGW(TAG,
                      "Server sample rate %d does not match device output sample rate %d, "
@@ -570,6 +628,7 @@ void Application::InitializeProtocol() {
     protocol_->OnAudioChannelClosed([this, &board]() {
         board.SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
         Schedule([this]() {
+            CancelConversationVisualTurn();
             auto display = Board::GetInstance().GetDisplay();
             display->SetChatMessage("system", "");
             SetDeviceState(kDeviceStateIdle);
@@ -622,12 +681,27 @@ void Application::InitializeProtocol() {
                 return;
             }
             if (strcmp(state->valuestring, "start") == 0) {
-                Schedule([this]() {
+                const auto generation = conversation_visual_session_.generation();
+                Schedule([this, generation]() {
                     aborted_ = false;
-                    SetDeviceState(kDeviceStateSpeaking);
+                    const bool speaking = SetDeviceState(kDeviceStateSpeaking) ||
+                                          GetDeviceState() == kDeviceStateSpeaking;
+                    if (speaking && conversation_visual_session_.Accepts(generation)) {
+                        auto event = conversation_visual_session_.MakeEvent(
+                            ConversationVisualEventKind::TtsStarted, VisualNowMs());
+                        event.playback_idle = audio_service_.IsPlaybackIdle();
+                        DispatchConversationVisualEvent(event);
+                    }
                 });
             } else if (strcmp(state->valuestring, "stop") == 0) {
-                Schedule([this]() {
+                const auto generation = conversation_visual_session_.generation();
+                Schedule([this, generation]() {
+                    if (conversation_visual_session_.Accepts(generation)) {
+                        auto event = conversation_visual_session_.MakeEvent(
+                            ConversationVisualEventKind::TtsStopped, VisualNowMs());
+                        event.playback_idle = audio_service_.IsPlaybackIdle();
+                        DispatchConversationVisualEvent(event);
+                    }
                     if (GetDeviceState() == kDeviceStateSpeaking) {
                         if (listening_mode_ == kListeningModeManualStop) {
                             SetDeviceState(kDeviceStateIdle);
@@ -641,14 +715,21 @@ void Application::InitializeProtocol() {
                 if (cJSON_IsString(text)) {
                     std::vector<TextGlyph> glyphs;
                     uint8_t bpp = 0;
-                    if (!TextGlyphPayload::Parse(root, glyphs, bpp)) {
+                    if (!conversation_visuals_enabled_ &&
+                        !TextGlyphPayload::Parse(root, glyphs, bpp)) {
                         glyphs.clear();
                     }
                     ESP_LOGI(TAG, "<< %s", text->valuestring);
-                    Schedule([display, message = std::string(text->valuestring),
+                    const auto generation = conversation_visual_session_.generation();
+                    Schedule([this, display, generation, message = std::string(text->valuestring),
                               glyphs = std::move(glyphs), bpp]() {
-                        display->AddTextGlyphs(glyphs, bpp);
-                        display->SetChatMessage("assistant", message.c_str());
+                        if (conversation_visuals_enabled_ &&
+                            !conversation_visual_session_.Accepts(generation))
+                            return;
+                        if (!conversation_visuals_enabled_) {
+                            display->AddTextGlyphs(glyphs, bpp);
+                            display->SetChatMessage("assistant", message.c_str());
+                        }
                     });
                 }
             }
@@ -657,21 +738,41 @@ void Application::InitializeProtocol() {
             if (cJSON_IsString(text)) {
                 std::vector<TextGlyph> glyphs;
                 uint8_t bpp = 0;
-                if (!TextGlyphPayload::Parse(root, glyphs, bpp)) {
+                if (!conversation_visuals_enabled_ && !TextGlyphPayload::Parse(root, glyphs, bpp)) {
                     glyphs.clear();
                 }
                 ESP_LOGI(TAG, ">> %s", text->valuestring);
-                Schedule([display, message = std::string(text->valuestring),
+                const auto generation = conversation_visual_session_.generation();
+                Schedule([this, display, generation, message = std::string(text->valuestring),
                           glyphs = std::move(glyphs), bpp]() {
-                    display->AddTextGlyphs(glyphs, bpp);
-                    display->SetChatMessage("user", message.c_str());
+                    if (conversation_visuals_enabled_ &&
+                        !conversation_visual_session_.Accepts(generation))
+                        return;
+                    conversation_visual_session_.FinalTranscript(message, VisualNowMs());
+                    if (!conversation_visuals_enabled_) {
+                        display->AddTextGlyphs(glyphs, bpp);
+                        display->SetChatMessage("user", message.c_str());
+                    }
                 });
             }
         } else if (strcmp(type->valuestring, "llm") == 0) {
             auto emotion = cJSON_GetObjectItem(root, "emotion");
             if (cJSON_IsString(emotion)) {
-                Schedule([display, emotion_str = std::string(emotion->valuestring)]() {
-                    display->SetEmotion(emotion_str.c_str());
+                const auto generation = conversation_visual_session_.generation();
+                std::string emotion_value =
+                    conversation_visuals_enabled_ && strnlen(emotion->valuestring, 41) > 40
+                        ? "neutral"
+                        : emotion->valuestring;
+                Schedule([this, display, generation, emotion_str = std::move(emotion_value)]() {
+                    if (conversation_visuals_enabled_) {
+                        if (!conversation_visual_session_.Accepts(generation))
+                            return;
+                        auto event = conversation_visual_session_.MakeEvent(
+                            ConversationVisualEventKind::Emotion, VisualNowMs());
+                        event.emotion = emotion_str;
+                        DispatchConversationVisualEvent(event);
+                    } else
+                        display->SetEmotion(emotion_str.c_str());
                 });
             }
         } else if (strcmp(type->valuestring, "mcp") == 0) {
@@ -751,10 +852,20 @@ void Application::ShowActivationCode(const std::string& code, const std::string&
 
 void Application::Alert(const char* status, const char* message, const char* emotion,
                         const std::string_view& sound) {
+    if (conversation_visuals_enabled_ && xTaskGetCurrentTaskHandle() != main_task_handle_) {
+        Schedule([this, status = std::string(status), message = std::string(message),
+                  emotion = std::string(emotion), sound = std::string(sound)]() {
+            Alert(status.c_str(), message.c_str(), emotion.c_str(), sound);
+        });
+        return;
+    }
+    DispatchConversationVisualEvent(conversation_visual_session_.MakeEvent(
+        ConversationVisualEventKind::NoticeStarted, VisualNowMs()));
     ESP_LOGW(TAG, "Alert [%s] %s: %s", emotion, status, message);
     auto display = Board::GetInstance().GetDisplay();
     display->SetStatus(status);
-    display->SetEmotion(emotion);
+    if (!conversation_visuals_enabled_)
+        display->SetEmotion(emotion);
     display->SetChatMessage("system", message);
     if (!sound.empty()) {
         audio_service_.PlaySound(sound);
@@ -762,6 +873,12 @@ void Application::Alert(const char* status, const char* message, const char* emo
 }
 
 void Application::DismissAlert() {
+    if (conversation_visuals_enabled_ && xTaskGetCurrentTaskHandle() != main_task_handle_) {
+        Schedule([this]() { DismissAlert(); });
+        return;
+    }
+    DispatchConversationVisualEvent(conversation_visual_session_.MakeEvent(
+        ConversationVisualEventKind::NoticeCleared, VisualNowMs()));
     last_error_message_.clear();
     if (GetDeviceState() == kDeviceStateIdle) {
         auto display = Board::GetInstance().GetDisplay();
@@ -1004,6 +1121,17 @@ void Application::HandleStateChangedEvent() {
     auto led = board.GetLed();
     led->OnStateChanged();
 
+    ConversationActivity activity = ConversationActivity::Idle;
+    if (new_state == kDeviceStateStarting || new_state == kDeviceStateWifiConfiguring ||
+        new_state == kDeviceStateActivating || new_state == kDeviceStateUpgrading ||
+        new_state == kDeviceStateAudioTesting)
+        activity = ConversationActivity::Maintenance;
+    else if (new_state == kDeviceStateConnecting)
+        activity = ConversationActivity::Connecting;
+    else if (new_state == kDeviceStateListening && audio_service_.IsAudioProcessorRunning())
+        activity = ConversationActivity::Listening;
+    conversation_visual_session_.SetActivity(activity, VisualNowMs());
+
     switch (new_state) {
         case kDeviceStateUnknown:
         case kDeviceStateIdle:
@@ -1078,6 +1206,7 @@ void Application::StartListeningAudio() {
     // Send the start listening command
     protocol_->SendStartListening(listening_mode_);
     audio_service_.EnableVoiceProcessing(true);
+    BeginConversationVisualTurn();
 
     ConfigureWakeWordForListening();
 
@@ -1124,13 +1253,26 @@ void Application::StartNotification(std::string audio_url, std::vector<NotifySub
         playback_id = ++notification_playback_id_;
     }
     audio_service_.PlaySound(Lang::Sounds::OGG_POPUP);
+    const auto generation = conversation_visual_session_.BeginTurn(VisualNowMs());
+    visual_notification_id_.store(playback_id);
+    visual_notification_generation_.store(generation);
+    auto event = conversation_visual_session_.MakeEvent(
+        ConversationVisualEventKind::NotificationStarted, VisualNowMs());
+    event.playback_id = playback_id;
+    event.playback_idle = false;
+    DispatchConversationVisualEvent(event);
 
     bool started = notify_player_.Start(
         std::move(audio_url), std::move(subtitles), playback_id,
-        [this](uint32_t id, const std::string& text) {
-            Schedule([this, id, text]() {
+        [this, generation](uint32_t id, const std::string& text) {
+            Schedule([this, generation, id, text]() {
+                if (conversation_visuals_enabled_ &&
+                    !conversation_visual_session_.Accepts(generation))
+                    return;
                 if (GetDeviceState() == kDeviceStateNotifying && notification_playback_id_ == id) {
-                    Board::GetInstance().GetDisplay()->SetChatMessage("assistant", text.c_str());
+                    if (!conversation_visuals_enabled_)
+                        Board::GetInstance().GetDisplay()->SetChatMessage("assistant",
+                                                                          text.c_str());
                 }
             });
         },
@@ -1145,6 +1287,8 @@ void Application::StartNotification(std::string audio_url, std::vector<NotifySub
 }
 
 void Application::StopNotification() {
+    if (visual_notification_id_.exchange(0) != 0)
+        CancelConversationVisualTurn();
     notify_player_.Stop();
     audio_service_.ResetDecoder();
     auto& board = Board::GetInstance();
@@ -1161,6 +1305,12 @@ void Application::HandleNotificationFinished(uint32_t playback_id, bool success)
     }
     ESP_LOGI(TAG, "Notification playback %lu %s", static_cast<unsigned long>(playback_id),
              success ? "completed" : "failed");
+    auto event = conversation_visual_session_.MakeEvent(
+        ConversationVisualEventKind::NotificationFinished, VisualNowMs());
+    event.playback_id = playback_id;
+    DispatchConversationVisualEvent(event);
+    PollConversationVisuals();
+    visual_notification_id_.store(0);  // normal end preserves the resting emotion
     StopNotification();
 }
 
@@ -1173,6 +1323,7 @@ void Application::Schedule(std::function<void()>&& callback) {
 }
 
 void Application::AbortSpeaking(AbortReason reason) {
+    CancelConversationVisualTurn();
     ESP_LOGI(TAG, "Abort speaking");
     aborted_ = true;
     if (protocol_) {
@@ -1361,6 +1512,7 @@ void Application::PlaySound(const std::string_view& sound) { audio_service_.Play
 
 void Application::ResetProtocol() {
     Schedule([this]() {
+        CancelConversationVisualTurn();
         if (GetDeviceState() == kDeviceStateNotifying) {
             StopNotification();
         }
@@ -1371,4 +1523,35 @@ void Application::ResetProtocol() {
         // Reset protocol
         protocol_.reset();
     });
+}
+
+void Application::DispatchConversationVisualEvent(const ConversationVisualEvent& event) {
+    conversation_visual_session_.Dispatch(event);
+}
+
+void Application::BeginConversationVisualTurn() {
+    if (!conversation_visuals_enabled_)
+        return;
+    conversation_visual_session_.SetActivity(ConversationActivity::Listening, VisualNowMs());
+    conversation_visual_session_.BeginTurn(VisualNowMs());
+}
+
+void Application::CancelConversationVisualTurn() {
+    if (!conversation_visuals_enabled_)
+        return;
+    conversation_visual_session_.Cancel(VisualNowMs());
+}
+
+void Application::PollConversationVisuals() {
+    if (!conversation_visuals_enabled_)
+        return;
+    const auto now = VisualNowMs();
+    conversation_visual_session_.ConsumeAudioActivity(now);
+    auto event =
+        conversation_visual_session_.MakeEvent(ConversationVisualEventKind::PlaybackState, now);
+    event.playback_id = visual_notification_id_.load();
+    event.playback_idle = audio_service_.IsPlaybackIdle();  // revalidate stale drain signals
+    DispatchConversationVisualEvent(event);
+    DispatchConversationVisualEvent(
+        conversation_visual_session_.MakeEvent(ConversationVisualEventKind::Tick, now));
 }
