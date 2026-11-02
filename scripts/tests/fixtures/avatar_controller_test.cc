@@ -153,20 +153,20 @@ void TestRealtimeCaptureStartsNewTurn() {
     Expect("test_realtime_capture_starts_new_turn", c.Resolve(400), "listening", false, false);
 }
 
-void TestEmptySttIsFilteredAtBoundary() {
+void TestStaleTranscriptAndVadSilence() {
     // El evento no transporta transcripciones: el adaptador descarta el STT
     // vacío y aquí solo llegan turnos válidos de la generación vigente.
     AvatarController c;
     c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Listening));
     c.Handle(Ev(Kind::TurnStarted, 2, 100, 0, false, Activity::Listening));
     c.Handle(Ev(Kind::FinalTranscript, 1, 200, 0, true, Activity::Listening));
-    Expect("test_empty_stt_is_filtered_at_boundary", c.Resolve(200), "listening", false, false);
+    Expect("test_stale_transcript_and_vad_silence", c.Resolve(200), "listening", false, false);
 
     // Un VAD a silencio, por sí solo, no inicia la espera de respuesta.
     c.Handle(Ev(Kind::Activity, 2, 300, 0, true, Activity::Idle));
-    Expect("test_empty_stt_is_filtered_at_boundary", c.Resolve(300), "neutral", false, false);
+    Expect("test_stale_transcript_and_vad_silence", c.Resolve(300), "neutral", false, false);
     c.Handle(Ev(Kind::Tick, 2, 400));
-    Expect("test_empty_stt_is_filtered_at_boundary", c.Resolve(400), "neutral", false, false);
+    Expect("test_stale_transcript_and_vad_silence", c.Resolve(400), "neutral", false, false);
 }
 
 void TestMoodExpiresAt5000Ms() {
@@ -461,7 +461,7 @@ void TestStopWithoutIdleKeepsSpeaking() {
     r.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
     r.Handle(Ev(Kind::TtsStopped, 1, 200, 0, false));
     ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", r, 30199, "speaking");
-    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", r, 30200, "neutral");
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", r, 30200, "speaking");
 
     // Audio aceptado despues del stop extiende la ventana de recuperacion.
     AvatarController a;
@@ -470,7 +470,7 @@ void TestStopWithoutIdleKeepsSpeaking() {
     a.Handle(Ev(Kind::TtsStopped, 1, 200, 0, false));
     a.Handle(Ev(Kind::AudioActivity, 1, 20000, 0, false));
     ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", a, 30199, "speaking");
-    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", a, 50200, "neutral");
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", a, 50200, "speaking");
 }
 
 void TestNotificationDrainedBeforeFinished() {
@@ -636,7 +636,9 @@ void TestNotificationPlaybackIdChecks() {
         c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, listening));
         c.Handle(Ev(Kind::NotificationStarted, 1, 1000, 11, false));
         Expect("test_notification_playback_id_checks", c.Resolve(30999), "speaking", false, false);
-        Expect("test_notification_playback_id_checks", c.Resolve(31000), "listening", false, false);
+        Expect("test_notification_playback_id_checks", c.Resolve(31000), "speaking", false, false);
+        c.Handle(Ev(Kind::PlaybackState, 1, 31001, 11, true));
+        Expect("notification idle recovery", c.Resolve(31001), "listening", false, false);
     }
 }
 
@@ -671,6 +673,57 @@ void TestCancellationClearsEmotion() {
     ExpectResolvedEmotion("test_cancellation_clears_emotion", d, 300, "sad");
 }
 
+void TestPendingPlaybackCannotTimeout() {
+    for (bool notification : {false, true}) {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0));
+        c.Handle(Ev(notification ? Kind::NotificationStarted : Kind::TtsStarted, 1, 100, 7, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 200, 7, false));
+        c.Handle(Ev(Kind::Tick, 1, 50000));
+        ExpectResolvedEmotion("pending playback at timeout", c, 50000, "speaking");
+        c.Handle(Ev(Kind::PlaybackState, 1, 50001, 7, true));
+        ExpectResolvedEmotion("drained silent recovery", c, 50001, "neutral");
+    }
+}
+
+void TestLateDrainStartsMoodWindowAtActualEnd() {
+    AvatarController c;
+    c.Handle(Ev(Kind::TurnStarted, 1, 0));
+    c.Handle(Ev(Kind::Emotion, 1, 1, 0, true, Activity::Idle, "happy"));
+    c.Handle(Ev(Kind::TtsStarted, 1, 2, 0, false));
+    c.Handle(Ev(Kind::TtsStopped, 1, 3, 0, false));
+    c.Handle(Ev(Kind::PlaybackState, 1, 100000, 0, true));
+    ExpectResolvedEmotion("late drain mood window", c, 104999, "happy");
+    ExpectResolvedEmotion("late drain mood expiry", c, 105000, "neutral");
+}
+
+void TestRepeatedStartDoesNotExtendDeadline() {
+    AvatarController w;
+    w.Handle(Ev(Kind::TurnStarted, 1, 0));
+    w.Handle(Ev(Kind::FinalTranscript, 1, 100));
+    w.Handle(Ev(Kind::FinalTranscript, 1, 20000));
+    ExpectResolvedEmotion("duplicate final transcript", w, 30100, "neutral");
+    AvatarController t;
+    t.Handle(Ev(Kind::TurnStarted, 1, 0));
+    t.Handle(Ev(Kind::TtsStarted, 1, 100));
+    t.Handle(Ev(Kind::TtsStarted, 1, 20000));
+    ExpectResolvedEmotion("duplicate tts start", t, 30100, "neutral");
+}
+
+void TestNewStartCancelsPendingStop() {
+    // A stop with queued audio, then another reply in the same turn: draining
+    // the first reply must not end the animation of the second one.
+    AvatarController c;
+    c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    c.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+    c.Handle(Ev(Kind::TtsStopped, 1, 200, 0, false));
+    c.Handle(Ev(Kind::TtsStarted, 1, 300, 0, false));
+    c.Handle(Ev(Kind::PlaybackState, 1, 400, 0, true));
+    ExpectResolvedEmotion("test_new_start_cancels_pending_stop", c, 400, "speaking");
+    c.Handle(Ev(Kind::TtsStopped, 1, 500, 0, true));
+    ExpectResolvedEmotion("test_new_start_cancels_pending_stop", c, 500, "neutral");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -692,10 +745,14 @@ int main(int argc, char** argv) {
     }
 
     const std::map<std::string, void (*)()> cases = {
+        {"test_late_drain_starts_mood_window_at_actual_end",
+         TestLateDrainStartsMoodWindowAtActualEnd},
+        {"test_pending_playback_cannot_timeout", TestPendingPlaybackCannotTimeout},
+        {"test_repeated_start_does_not_extend_deadline", TestRepeatedStartDoesNotExtendDeadline},
         {"test_stop_requires_drained", TestStopRequiresDrained},
         {"test_new_turn_rejects_stale_callbacks", TestNewTurnRejectsStaleCallbacks},
         {"test_realtime_capture_starts_new_turn", TestRealtimeCaptureStartsNewTurn},
-        {"test_empty_stt_is_filtered_at_boundary", TestEmptySttIsFilteredAtBoundary},
+        {"test_stale_transcript_and_vad_silence", TestStaleTranscriptAndVadSilence},
         {"test_mood_expires_at_5000_ms", TestMoodExpiresAt5000Ms},
         {"test_wait_expires_at_30000_ms", TestWaitExpiresAt30000Ms},
         {"test_audio_activity_extends_missing_stop_deadline",
@@ -710,6 +767,7 @@ int main(int argc, char** argv) {
         {"test_stop_drain_finish_permutations", TestStopDrainFinishPermutations},
         {"test_notification_playback_id_checks", TestNotificationPlaybackIdChecks},
         {"test_cancellation_clears_emotion", TestCancellationClearsEmotion},
+        {"test_new_start_cancels_pending_stop", TestNewStartCancelsPendingStop},
     };
 
     if (argc < 2) {

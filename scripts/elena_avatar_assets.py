@@ -23,6 +23,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,11 +75,15 @@ def gif_metadata(path: Path) -> dict:
     while position < len(data):
         separator = data[position]
         if separator == 0x3B:  # trailer
-            break
+            if frames == 0 or position != len(data) - 1:
+                raise AvatarAssetError(f"{path.name}: invalid GIF trailer")
+            return {"width": width, "height": height, "frames": frames, "bytes": len(data)}
         if separator == 0x21:  # extension: label byte, then data sub-blocks
             position = _skip_sub_blocks(data, position + 2, path)
             continue
         if separator == 0x2C:  # image descriptor: 9 field bytes, then LZW data
+            if position + 10 > len(data):
+                raise AvatarAssetError(f"{path.name}: truncated image descriptor")
             frames += 1
             position += 1 + 9
             local_flags = data[position - 1]
@@ -88,9 +93,7 @@ def gif_metadata(path: Path) -> dict:
             continue
         raise AvatarAssetError(f"{path.name}: unexpected block 0x{separator:02x} at {position}")
 
-    if frames == 0:
-        raise AvatarAssetError(f"{path.name}: no image descriptors found")
-    return {"width": width, "height": height, "frames": frames, "bytes": len(data)}
+    raise AvatarAssetError(f"{path.name}: missing GIF trailer")
 
 
 def _read_u16(data: bytes, offset: int) -> int:
@@ -314,7 +317,12 @@ def write_avatar_fallback_header(rgb565_path: Path, output: Path) -> None:
     for start in range(0, len(data), 12):
         chunk = data[start : start + 12]
         lines.append("    " + ", ".join(f"0x{byte:02x}" for byte in chunk) + ",")
-    lines += ["};", "", "#endif  /* ELENA_AVATAR_FALLBACK_H */", ""]
+    lines += ["};", "", "struct ElenaAvatarGifIntegrity { const char* name; uint32_t size; uint32_t crc32; };",
+              "static const struct ElenaAvatarGifIntegrity elena_avatar_gif_integrity[] = {"]
+    for gif in sorted((rgb565_path.parent / "gifs").glob("*.gif")):
+        content = gif.read_bytes()
+        lines.append(f'    {{"{gif.stem}", {len(content)}, 0x{zlib.crc32(content):08x}u}},')
+    lines += ['    {"", 0, 0}', "};", "", "#endif  /* ELENA_AVATAR_FALLBACK_H */", ""]
     output.write_text("\n".join(lines), encoding="utf-8")
 
 

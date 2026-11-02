@@ -129,15 +129,14 @@ bool AvatarController::IsSpeaking(uint64_t now_ms) const {
         }
         // Recovery only: 30 s without an accepted audio signal closes the
         // visual cycle. It never stops the notification itself.
-        return now_ms < last_audio_ms_ + kAvatarAudioIdleTimeoutMs;
+        return !playback_idle_ || now_ms < last_audio_ms_ + kAvatarAudioIdleTimeoutMs;
     }
     if (!tts_cycle_active_) {
         return false;
     }
-    // Either tts.stop arrived with audio still queued, or the cycle never
-    // reported its end. Both keep speaking until the player drains, bounded by
-    // 30 s without an accepted audio signal.
-    return now_ms < last_audio_ms_ + kAvatarAudioIdleTimeoutMs;
+    // Pending playback always owns the view. Recovery requires BOTH idle
+    // playback and 30 s without accepted audio; a timer never hides queued audio.
+    return !playback_idle_ || now_ms < last_audio_ms_ + kAvatarAudioIdleTimeoutMs;
 }
 
 uint64_t AvatarController::CycleEndMs(uint64_t now_ms) const {
@@ -173,10 +172,8 @@ void AvatarController::RearmMood(uint64_t settled_ms) {
 }
 
 void AvatarController::EndSpeakingCycle(uint64_t now_ms, const char* reason) {
-    // The cycle ends now when an event closed it, and at the window when only
-    // the recovery window closed it. The mood counts from whichever it was.
-    const uint64_t cycle_end_ms = CycleEndMs(now_ms);
-    const uint64_t settled_ms = cycle_end_ms == 0 ? now_ms : std::min(now_ms, cycle_end_ms);
+    // Event-driven completion uses the actual drain/stop time. Recovery
+    // callers explicitly pass the expired deadline instead.
     tts_cycle_active_ = false;
     tts_stop_pending_ = false;
     notification_active_ = false;
@@ -184,7 +181,7 @@ void AvatarController::EndSpeakingCycle(uint64_t now_ms, const char* reason) {
     notification_drained_ = false;
     thinking_active_ = false;
     // The conversation mood stays available for the rest window.
-    RearmMood(settled_ms);
+    RearmMood(now_ms);
     expiry_reason_ = reason;
 }
 
@@ -201,10 +198,10 @@ void AvatarController::CancelTurn(const char* reason) {
 
 void AvatarController::Sweep(uint64_t now_ms) {
     if (notification_active_ && !IsSpeaking(now_ms)) {
-        EndSpeakingCycle(now_ms, "notification_timeout");
+        EndSpeakingCycle(last_audio_ms_ + kAvatarAudioIdleTimeoutMs, "notification_timeout");
     }
     if (tts_cycle_active_ && !IsSpeaking(now_ms)) {
-        EndSpeakingCycle(now_ms, "audio_idle_timeout");
+        EndSpeakingCycle(last_audio_ms_ + kAvatarAudioIdleTimeoutMs, "audio_idle_timeout");
     }
     if (thinking_active_ && !IsThinking(now_ms)) {
         const uint64_t settled_ms = std::min(now_ms, thinking_deadline_ms_);
@@ -278,7 +275,7 @@ void AvatarController::Handle(const ConversationVisualEvent& event) {
             break;
 
         case ConversationVisualEventKind::FinalTranscript:
-            if (!IsMaintenance(now_ms)) {
+            if (!IsMaintenance(now_ms) && !thinking_active_ && !tts_cycle_active_) {
                 thinking_active_ = true;
                 thinking_deadline_ms_ = now_ms + kAvatarWaitTimeoutMs;
             }
@@ -293,10 +290,13 @@ void AvatarController::Handle(const ConversationVisualEvent& event) {
             break;
 
         case ConversationVisualEventKind::TtsStarted:
-            if (!IsMaintenance(now_ms)) {
+            if (!IsMaintenance(now_ms) && (!tts_cycle_active_ || tts_stop_pending_)) {
+                playback_idle_ = event.playback_idle;
                 // A valid answer also ends the visual wait.
                 thinking_active_ = false;
                 tts_cycle_active_ = true;
+                // Another reply in the same turn: the earlier stop no longer
+                // describes the audio in the queue.
                 tts_stop_pending_ = false;
                 last_audio_ms_ = now_ms;
             }
@@ -320,7 +320,6 @@ void AvatarController::Handle(const ConversationVisualEvent& event) {
         case ConversationVisualEventKind::PlaybackState:
             playback_idle_ = event.playback_idle;
             if (!playback_idle_) {
-                last_audio_ms_ = now_ms;
                 break;
             }
             if (notification_active_) {
@@ -343,6 +342,7 @@ void AvatarController::Handle(const ConversationVisualEvent& event) {
             break;
 
         case ConversationVisualEventKind::NotificationStarted:
+            playback_idle_ = event.playback_idle;
             notification_active_ = true;
             notification_playback_id_ = event.playback_id;
             notification_finished_ = false;

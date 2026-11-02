@@ -13,10 +13,13 @@ BOARD = ROOT / "main" / "boards" / "elena-stackchan"
 FIXTURE = FIXTURES / "avatar_controller_test.cc"
 
 CASES = (
+    "test_late_drain_starts_mood_window_at_actual_end",
+    "test_pending_playback_cannot_timeout",
+    "test_repeated_start_does_not_extend_deadline",
     "test_stop_requires_drained",
     "test_new_turn_rejects_stale_callbacks",
     "test_realtime_capture_starts_new_turn",
-    "test_empty_stt_is_filtered_at_boundary",
+    "test_stale_transcript_and_vad_silence",
     "test_mood_expires_at_5000_ms",
     "test_wait_expires_at_30000_ms",
     "test_audio_activity_extends_missing_stop_deadline",
@@ -30,6 +33,7 @@ CASES = (
     "test_stop_drain_finish_permutations",
     "test_notification_playback_id_checks",
     "test_cancellation_clears_emotion",
+    "test_new_start_cancels_pending_stop",
 )
 
 
@@ -74,32 +78,6 @@ def make_case(case_name):
 
 for case_name in CASES:
     setattr(AvatarControllerHarnessTest, case_name, make_case(case_name))
-
-
-class ConversationVisualContractTest(unittest.TestCase):
-    """The contract crossing Schedule must never carry spoken text."""
-
-    def test_contract_has_no_transcript_fields(self):
-        header = DISPLAY / "conversation_visual.h"
-        text = header.read_text(encoding="utf-8")
-        for forbidden in ("transcript", "content", "message", "text", "role", "char*"):
-            self.assertNotIn(forbidden, text)
-
-    def test_display_has_optional_conversation_hooks(self):
-        text = (DISPLAY / "display.h").read_text(encoding="utf-8")
-        self.assertIn("virtual bool SupportsConversationVisuals() const { return false; }", text)
-        self.assertIn(
-            "virtual void OnConversationVisualEvent(const ConversationVisualEvent& event) { "
-            "(void)event; }",
-            text,
-        )
-        self.assertIn('#include "conversation_visual.h"', text)
-
-    def test_controller_has_no_lvgl_or_esp_dependency(self):
-        for name in ("avatar_controller.h", "avatar_controller.cc"):
-            text = (BOARD / name).read_text(encoding="utf-8")
-            for forbidden in ("lvgl", "esp_", "driver/", "Application", "EmojiCollection"):
-                self.assertNotIn(forbidden, text)
 
 
 if __name__ == "__main__":

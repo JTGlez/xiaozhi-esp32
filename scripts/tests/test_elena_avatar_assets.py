@@ -651,3 +651,38 @@ class ElenaAvatarValidateGuardsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IndependentFrameOracleTests(unittest.TestCase):
+    def test_every_v3_frame_matches_independent_compositor(self):
+        # Detects common decoder/compositing errors which two cache modes can share.
+        oracle = json.loads((GIF_FIXTURES / "v3-frames.json").read_text())["gifs"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for cache in (False, True):
+                decoder = compile_gif_decoder(root / str(cache), cache)
+                for name, frames in oracle.items():
+                    output = root / "frames.bgra"
+                    subprocess.run([decoder,"frames",GIFS_DIR / (name+".gif"),output,str(len(frames)*2)], check=True, capture_output=True)
+                    data=output.read_bytes()
+                    self.assertEqual(len(data),320*240*4*len(frames)*2)
+                    for i in range(len(frames)*2):
+                        with self.subTest(name=name, cache=cache, frame=i):
+                            actual = hashlib.sha256(data[i*307200:(i+1)*307200]).hexdigest()
+                            self.assertEqual(actual, frames[i%len(frames)]["sha256_bgra"])
+
+
+class GifBoundaryTests(unittest.TestCase):
+    def test_metadata_rejects_truncation_at_every_container_boundary(self):
+        # Catch an unchecked descriptor read or accepting EOF in place of trailer.
+        data = (GIFS_DIR/'neutral.gif').read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory)/'truncated.gif'
+            for length in (12,13,14,790,len(data)-1):
+                with self.subTest(length=length):
+                    file.write_bytes(data[:length])
+                    with self.assertRaises(ValueError): AVA.gif_metadata(file)
+            # An image descriptor starts within the file but its fields end outside it.
+            prefix = data[:13+3*(2 << (data[10]&7))] + b'\x2c\x00'
+            file.write_bytes(prefix)
+            with self.assertRaises(ValueError): AVA.gif_metadata(file)

@@ -1685,3 +1685,11 @@ class ZipTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ElenaBoardTests(unittest.TestCase):
+    def test_elena_and_generic_resolve_independently(self):
+        self.assertEqual(build._resolve_board_config("elena-stackchan", "esp32s3", ["CONFIG_BOARD_TYPE_ELENA_STACKCHAN=y"], variant_name="elena-stackchan"), "CONFIG_BOARD_TYPE_ELENA_STACKCHAN")
+        self.assertEqual(build._resolve_board_config("m5stack/core-s3", "esp32s3", [], variant_name="m5stack-core-s3"), "CONFIG_BOARD_TYPE_M5STACK_CORE_S3")
+        variants = build._collect_variants(idf_version=(6, 1, 0))
+        self.assertTrue(any(v["name"] == "elena-stackchan" for v in variants))

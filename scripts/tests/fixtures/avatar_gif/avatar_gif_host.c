@@ -180,6 +180,21 @@ int main(int argc, char** argv) {
         result = inspect(gif);
     } else if (strcmp(argv[1], "rgb565") == 0 && argc >= 4) {
         result = first_frame_rgb565(gif, argv[3]);
+    } else if (strcmp(argv[1], "frames") == 0 && argc == 5) {
+        FILE* output = fopen(argv[3], "wb");
+        result = output == NULL;
+        for (int i = 0; !result && i < atoi(argv[4]); ++i) {
+            if (gd_get_frame(gif) != 1) {
+                result = 1;
+                break;
+            }
+            gd_render_frame(gif, gif->canvas);
+            size_t length = (size_t)gif->width * gif->height * 4;
+            if (fwrite(gif->canvas, 1, length, output) != length)
+                result = 1;
+        }
+        if (output)
+            fclose(output);
     } else {
         result = usage(argv[0]);
     }
