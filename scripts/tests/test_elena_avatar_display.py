@@ -32,8 +32,8 @@ DISPLAY = ROOT / "main" / "display"
 LVGLD = DISPLAY / "lvgl_display"
 GIFD = LVGLD / "gif"
 HARNESS = FIXTURES / "elena_avatar_display_test.cc"
-GIFS_DIR = BOARD / "assets" / "gifs"
-FALLBACK_RGB565 = BOARD / "assets" / "neutral.rgb565"
+GIFS_DIR = BOARD / "avatars" / "elena" / "gifs"
+FALLBACK_RGB565 = BOARD / "avatars" / "elena" / "neutral.rgb565"
 
 sys.path.insert(0, str(SCRIPTS))
 import elena_avatar_assets as AVA  # noqa: E402

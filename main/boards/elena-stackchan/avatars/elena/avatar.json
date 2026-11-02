@@ -1,0 +1,12 @@
+{
+  "display_name": "Elena-Chan",
+  "renderer": "gif",
+  "background": "#F9F0E9",
+  "accent": "#D9A45B",
+  "accent_text": "#3B2A2A",
+  "name_color": "#8A5A1E",
+  "icon_color": "#3B2A2A",
+  "emotions": "gifs",
+  "aliases": "aliases.json",
+  "fallback": "neutral.rgb565"
+}

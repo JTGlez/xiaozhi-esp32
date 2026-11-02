@@ -59,7 +59,7 @@ not change with the recolor:
 
 ```sh
 python3 scripts/elena_avatar_assets.py aliases \
-    --out main/boards/elena-stackchan/assets/aliases.json
+    --out main/boards/elena-stackchan/avatars/elena/aliases.json
 ```
 
 `scripts/tests/test_elena_avatar_assets.py::test_aliases_share_files` compares both tables
@@ -74,8 +74,8 @@ lookup keys; they never become paths.
 
 ```sh
 python3 scripts/elena_avatar_assets.py fallback \
-    --gif main/boards/elena-stackchan/assets/gifs/neutral.gif \
-    --out main/boards/elena-stackchan/assets/neutral.rgb565
+    --gif main/boards/elena-stackchan/avatars/elena/gifs/neutral.gif \
+    --out main/boards/elena-stackchan/avatars/elena/neutral.rgb565
 ```
 
 `test_fallback_matches_neutral_rgb565` regenerates it with the LZW cache on and off and
@@ -91,7 +91,7 @@ python3 scripts/elena_avatar_assets.py header --out build/avatar_fallback.h
 check them:
 
 ```sh
-cd main/boards/elena-stackchan/assets && sha256sum gifs/*.gif neutral.rgb565 > SHA256SUMS
+cd main/boards/elena-stackchan/avatars/elena && sha256sum gifs/*.gif neutral.rgb565 > SHA256SUMS
 python3 scripts/elena_avatar_assets.py validate
 ```
 

@@ -31,7 +31,7 @@ SCRIPTS = ROOT / "scripts"
 FIXTURES = SCRIPTS / "tests" / "fixtures"
 GIF_FIXTURES = FIXTURES / "avatar_gif"
 BOARD_DIR = ROOT / "main" / "boards" / "elena-stackchan"
-DEFAULT_ASSET_DIR = BOARD_DIR / "assets"
+DEFAULT_ASSET_DIR = BOARD_DIR / "avatars" / "elena"
 GIFDEC_DIR = ROOT / "main" / "display" / "lvgl_display" / "gif"
 
 CANVAS_WIDTH = 320

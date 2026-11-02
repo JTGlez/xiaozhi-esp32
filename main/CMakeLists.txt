@@ -232,14 +232,22 @@ elseif(CONFIG_BOARD_TYPE_M5STACK_CORE_P4)
 elseif(CONFIG_BOARD_TYPE_ELENA_STACKCHAN)
     set(BOARD_DIR "elena-stackchan")
     set(BUILTIN_TEXT_FONT font_noto_sans_basic_20_4)
-    if(CONFIG_ELENA_AVATAR_EMOJI)
-        set(BUILTIN_ICON_FONT font_material_symbols_20_4)
-        set(DEFAULT_EMOJI_COLLECTION noto-color-emoji_64)
-    else()
-        set(BUILTIN_ICON_FONT font_material_symbols_16_4)
-        set(DEFAULT_EMOJI_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/gifs")
-        set(DEFAULT_EMOJI_ALIASES "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/aliases.json")
-    endif()
+    set(BUILTIN_ICON_FONT font_material_symbols_16_4)
+    set(AVATAR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/avatars/${CONFIG_ELENA_AVATAR}")
+    idf_build_get_property(AVATAR_PYTHON PYTHON)
+    foreach(AVATAR_OUTPUT "cmake;avatar_pack.cmake" "header;avatar_pack_config.h")
+        list(GET AVATAR_OUTPUT 0 AVATAR_COMMAND)
+        list(GET AVATAR_OUTPUT 1 AVATAR_FILE)
+        execute_process(
+            COMMAND "${AVATAR_PYTHON}" "${PROJECT_DIR}/scripts/avatar_pack.py" "${AVATAR_COMMAND}"
+                    --avatar-dir "${AVATAR_DIR}" --out "${CMAKE_CURRENT_BINARY_DIR}/${AVATAR_FILE}"
+            RESULT_VARIABLE AVATAR_RESULT ERROR_VARIABLE AVATAR_ERROR)
+        if(NOT AVATAR_RESULT EQUAL 0)
+            message(FATAL_ERROR "Avatar '${CONFIG_ELENA_AVATAR}': ${AVATAR_ERROR}")
+        endif()
+    endforeach()
+    include("${CMAKE_CURRENT_BINARY_DIR}/avatar_pack.cmake")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${AVATAR_DIR}/avatar.json")
     list(APPEND SOURCES "boards/m5stack/core-s3/cores3_audio_codec.cc")
 elseif(CONFIG_BOARD_TYPE_M5STACK_CORE_S3)
     set(BOARD_DIR "m5stack/core-s3")
@@ -918,7 +926,7 @@ file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.c
 )
-if(CONFIG_ELENA_AVATAR_EMOJI)
+if(AVATAR_RENDERER STREQUAL "image")
     list(FILTER BOARD_SOURCES EXCLUDE REGEX "/(elena_avatar_display|avatar_controller)\\.cc$")
 endif()
 list(APPEND SOURCES ${BOARD_SOURCES})
@@ -1104,18 +1112,20 @@ if(CONFIG_BOARD_TYPE_ESP32_P4_FUNCTION_EV_BOARD)
         sdmmc
     )
 endif()
-if(CONFIG_ELENA_AVATAR_ELENA)
+if(AVATAR_FALLBACK_RGB565)
     set(ELENA_FALLBACK_HEADER "${CMAKE_CURRENT_BINARY_DIR}/elena_avatar_fallback.h")
     file(GLOB ELENA_HEADER_GIFS CONFIGURE_DEPENDS "${DEFAULT_EMOJI_DIRECTORY}/*.gif")
     add_custom_command(OUTPUT "${ELENA_FALLBACK_HEADER}"
         COMMAND python "${PROJECT_DIR}/scripts/elena_avatar_assets.py" header
-            --rgb565 "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/neutral.rgb565"
+            --rgb565 "${AVATAR_FALLBACK_RGB565}"
             --out "${ELENA_FALLBACK_HEADER}"
         DEPENDS "${PROJECT_DIR}/scripts/elena_avatar_assets.py"
-                "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/neutral.rgb565"
+                "${AVATAR_FALLBACK_RGB565}"
                 ${ELENA_HEADER_GIFS}
         VERBATIM)
     list(APPEND SOURCES "${ELENA_FALLBACK_HEADER}")
+endif()
+if(CONFIG_BOARD_TYPE_ELENA_STACKCHAN)
     list(APPEND INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
