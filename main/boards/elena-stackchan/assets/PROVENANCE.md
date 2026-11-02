@@ -17,30 +17,31 @@ although the art reaches about 360, which cut the thought bubble and the music n
 script restores that strip from the sheet and moves the art 16 px left, so the figure sits
 at x=4, y=30, keeping the kit's 87.5% scale. The eyes, mouth and recolor are the kit's.
 
-Each GIF uses one 64-color palette taken from all its frames. The script also sets frames and
+The script also saturates the art's dusty reds (`RED_GAIN`), which looked washed out on this
+panel. Skin and blush are left alone. Each GIF uses one 64-color palette taken from all its frames. The script also sets frames and
 timing for this board: `listening` is a single frame, because the microphone is being encoded
 while it shows and a redraw there competes with the encoder. The kit's `gifs-hq/`, `mouths/`,
 `preview.png`, `sprite_sheet.*` and viseme headers are not inputs to this binary.
 
 ```sh
-python3 scripts/elena_avatar_refit.py --kit ../elena-chan-avatar-kit-v3-platinum
+python3 scripts/elena_avatar_refit.py --kit <kit folder>
 ```
 
 | File | Bytes | Frames per loop | Canvas |
 | --- | --- | --- | --- |
-| `gifs/neutral.gif` | 59897 | 2 | 320 × 240 |
-| `gifs/happy.gif` | 119253 | 4 | 320 × 240 |
-| `gifs/sad.gif` | 117934 | 4 | 320 × 240 |
-| `gifs/thinking.gif` | 127876 | 4 | 320 × 240 |
-| `gifs/sleeping.gif` | 61783 | 2 | 320 × 240 |
-| `gifs/pet.gif` | 126691 | 4 | 320 × 240 |
-| `gifs/shake.gif` | 126147 | 4 | 320 × 240 |
-| `gifs/speaking.gif` | 158909 | 5 | 320 × 240 |
-| `gifs/listening.gif` | 33073 | 1 | 320 × 240 |
-| `gifs/look_left.gif` | 127451 | 4 | 320 × 240 |
-| `gifs/look_right.gif` | 123487 | 4 | 320 × 240 |
-| `gifs/email.gif` | 163041 | 5 | 320 × 240 |
-| **Total** | **1345542** | **43** | |
+| `gifs/neutral.gif` | 59094 | 2 | 320 × 240 |
+| `gifs/happy.gif` | 118223 | 4 | 320 × 240 |
+| `gifs/sad.gif` | 116216 | 4 | 320 × 240 |
+| `gifs/thinking.gif` | 126500 | 4 | 320 × 240 |
+| `gifs/sleeping.gif` | 60727 | 2 | 320 × 240 |
+| `gifs/pet.gif` | 123991 | 4 | 320 × 240 |
+| `gifs/shake.gif` | 125113 | 4 | 320 × 240 |
+| `gifs/speaking.gif` | 157148 | 5 | 320 × 240 |
+| `gifs/listening.gif` | 32338 | 1 | 320 × 240 |
+| `gifs/look_left.gif` | 126372 | 4 | 320 × 240 |
+| `gifs/look_right.gif` | 121973 | 4 | 320 × 240 |
+| `gifs/email.gif` | 161340 | 5 | 320 × 240 |
+| **Total** | **1329035** | **43** | |
 
 `scripts/tests/fixtures/avatar_gif/v3-frames.json` holds hashes of every frame as composed by
 Pillow, and `test_every_v3_frame_matches_independent_compositor` requires the firmware's own

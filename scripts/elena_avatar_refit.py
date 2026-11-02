@@ -12,12 +12,13 @@ single frame because the microphone is being encoded while it shows.
 
 Requires Pillow and the kit, which is not tracked:
 
-    python3 scripts/elena_avatar_refit.py --kit ../elena-chan-avatar-kit-v3-platinum
+    python3 scripts/elena_avatar_refit.py --kit <kit folder>
 """
 
 from __future__ import annotations
 
 import argparse
+import colorsys
 import hashlib
 import json
 import sys
@@ -41,6 +42,10 @@ FIT_X, FIT_Y = 20, 30
 FIT_HEIGHT = 210
 KIT_CROP = 320
 SHIFT = 16
+
+# The art's reds are a dusty burgundy that looks washed out on this panel.
+RED_GAIN = 1.9
+RED_DARKEN = 0.10
 
 # Longest a GIF frame can last, in ms: a static image is redrawn once per delay.
 STATIC_MS = 655350
@@ -88,6 +93,20 @@ def restored_strip(sheet: Image.Image, row: int, column: int) -> Image.Image:
     return strip
 
 
+def strengthen_reds(image: Image.Image) -> None:
+    """Saturate reds, fading out towards the light tones that are skin and blush."""
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            hue, light, saturation = colorsys.rgb_to_hls(*(v / 255 for v in pixels[x, y]))
+            degrees = hue * 360
+            if (degrees <= 14 or degrees >= 335) and 0.12 < light < 0.62 and saturation > 0.14:
+                weight = min(1, (0.62 - light) / 0.14)
+                rgb = colorsys.hls_to_rgb(hue, light * (1 - RED_DARKEN * weight),
+                                          min(1, saturation * (1 + (RED_GAIN - 1) * weight)))
+                pixels[x, y] = tuple(round(v * 255) for v in rgb)
+
+
 def refit(frame: Image.Image, strip: Image.Image) -> Image.Image:
     out = Image.new("RGB", CANVAS, BACKGROUND)
     out.paste(frame.convert("RGB").crop((SHIFT, 0, CANVAS[0], CANVAS[1])), (0, 0))
@@ -95,6 +114,7 @@ def refit(frame: Image.Image, strip: Image.Image) -> Image.Image:
     # Leftovers of the panel's rounded corners, in margins no expression uses.
     out.paste(BACKGROUND, (0, FIT_Y, 14, FIT_Y + 16))
     out.paste(BACKGROUND, (296, FIT_Y, CANVAS[0], FIT_Y + 16))
+    strengthen_reds(out)
     return out
 
 
