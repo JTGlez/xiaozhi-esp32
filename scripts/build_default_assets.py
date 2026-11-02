@@ -300,6 +300,75 @@ def process_emoji_collection(emoji_collection_dir, assets_dir):
     return emoji_list
 
 
+def read_emoji_aliases(aliases_path):
+    """Read a table mapping a received emotion name to a GIF name."""
+    if not aliases_path:
+        return {}
+
+    with open(aliases_path, 'r', encoding='utf-8') as f:
+        aliases = json.load(f)
+
+    if not isinstance(aliases, dict):
+        raise ValueError(f"emoji aliases must be a JSON object of name -> gif: {aliases_path}")
+
+    return aliases
+
+
+def process_emoji_directory(emoji_directory, assets_dir, aliases_path=None):
+    """Process a board's own GIF set plus its alias table.
+
+    Each alias becomes an extra emoji_collection entry that points at an already
+    copied file, so no GIF is duplicated per alias and nothing is hidden in
+    extra_files. Alias names are lookup keys only: they never become paths.
+    """
+    if not emoji_directory:
+        return []
+
+    if not os.path.isdir(emoji_directory):
+        raise ValueError(f"emoji directory not found: {emoji_directory}")
+
+    ensure_dir(assets_dir)
+    emoji_list = []
+    copied = {}
+
+    for file in sorted(os.listdir(emoji_directory)):
+        src_file = os.path.join(emoji_directory, file)
+        if not os.path.isfile(src_file) or not file.lower().endswith('.gif'):
+            continue
+
+        name = os.path.splitext(file)[0]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
+            raise ValueError(f"invalid emoji file name: {file}")
+        if not copy_file(src_file, os.path.join(assets_dir, file)):
+            raise ValueError(f"failed to copy emoji file: {src_file}")
+
+        copied[name] = file
+        emoji_list.append({
+            "name": name,
+            "file": file
+        })
+
+    if not emoji_list:
+        raise ValueError(f"no GIF files found in emoji directory: {emoji_directory}")
+
+    for alias, target in read_emoji_aliases(aliases_path).items():
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", str(alias)):
+            raise ValueError(f"invalid emoji alias name: {alias!r}")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", str(target)):
+            raise ValueError(f"invalid emoji alias target for {alias!r}: {target!r}")
+        if alias in copied:
+            raise ValueError(f"emoji alias {alias!r} collides with gif {alias}.gif")
+        if target not in copied:
+            raise ValueError(f"emoji alias {alias!r} targets a missing gif: {target!r}")
+
+        emoji_list.append({
+            "name": alias,
+            "file": copied[target]
+        })
+
+    return emoji_list
+
+
 def process_extra_files(extra_files_dir, assets_dir):
     """Process default_assets_extra_files parameter"""
     if not extra_files_dir:
@@ -810,7 +879,7 @@ def get_emoji_collection_path(default_emoji_collection, noto_fonts_path, project
 def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font_path,
                             emoji_collection_path, extra_files_path, output_path,
                             multinet_model_info=None, font_bundle_id=None, max_size=None,
-                            idf_target=None):
+                            idf_target=None, emoji_directory=None, emoji_aliases=None):
     """
     Build assets using integrated functions (no external dependencies)
     """
@@ -833,7 +902,12 @@ def build_assets_integrated(wakenet_model_paths, multinet_model_paths, text_font
             idf_target=idf_target,
         ) if (wakenet_model_paths or multinet_model_paths) else None
         text_font = process_text_font(text_font_path, assets_dir) if text_font_path else None
-        emoji_collection = process_emoji_collection(emoji_collection_path, assets_dir) if emoji_collection_path else None
+        if emoji_directory and emoji_collection_path:
+            raise ValueError("use either an emoji collection or an emoji directory, not both")
+        if emoji_directory:
+            emoji_collection = process_emoji_directory(emoji_directory, assets_dir, emoji_aliases)
+        else:
+            emoji_collection = process_emoji_collection(emoji_collection_path, assets_dir) if emoji_collection_path else None
         extra_files = process_extra_files(extra_files_path, assets_dir) if extra_files_path else None
         
         # Generate index.json
@@ -887,6 +961,10 @@ def main():
     parser.add_argument('--sdkconfig', required=True, help='Path to sdkconfig file')
     parser.add_argument('--builtin_text_font', help='Builtin text font name (e.g., font_noto_sans_basic_16_4)')
     parser.add_argument('--emoji_collection', help='Default emoji collection name (e.g., noto-color-emoji_32)')
+    parser.add_argument('--emoji_directory',
+                        help='Directory of this board\'s own GIF emojis, packaged as emoji_collection')
+    parser.add_argument('--emoji_aliases',
+                        help='JSON file mapping received emotion names to the GIFs in --emoji_directory')
     parser.add_argument('--output', required=True, help='Output path for assets.bin')
     parser.add_argument('--esp_sr_model_path', help='Path to ESP-SR model directory')
     parser.add_argument('--noto_fonts_path', help='Path to noto-fonts component directory')
@@ -968,6 +1046,13 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     emoji_collection_path = get_emoji_collection_path(args.emoji_collection, args.noto_fonts_path, project_root)
+
+    # A board may carry its own GIF set instead of a shared collection
+    emoji_directory = args.emoji_directory
+    emoji_aliases = args.emoji_aliases
+    if emoji_directory:
+        print(f"  emoji directory: {emoji_directory}")
+        print(f"  emoji aliases: {emoji_aliases or 'none'}")
     
     # Get extra files path if provided
     extra_files_path = args.extra_files
@@ -998,7 +1083,7 @@ def main():
         print(f"  wake word threshold: {custom_wake_word_config['threshold']}")
     
     # Check if we have anything to build
-    if not wakenet_model_paths and not multinet_model_paths and not text_font_path and not emoji_collection_path and not extra_files_path and not multinet_model_info:
+    if not wakenet_model_paths and not multinet_model_paths and not text_font_path and not emoji_collection_path and not emoji_directory and not extra_files_path and not multinet_model_info:
         print("Warning: No assets to build (no SR models, text font, emoji collection, extra files, or custom wake word)")
         # Create an empty assets.bin file
         os.makedirs(os.path.dirname(args.output), exist_ok=True)
@@ -1011,7 +1096,7 @@ def main():
     success = build_assets_integrated(
         wakenet_model_paths, multinet_model_paths, text_font_path, emoji_collection_path,
         extra_files_path, args.output, multinet_model_info, font_bundle_id, args.max_size,
-        idf_target=idf_target)
+        idf_target=idf_target, emoji_directory=emoji_directory, emoji_aliases=emoji_aliases)
     
     if not success:
         sys.exit(1)

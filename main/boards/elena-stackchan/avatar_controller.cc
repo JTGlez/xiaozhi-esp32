@@ -13,11 +13,6 @@ constexpr const char* kSpeaking = "speaking";
 // Fixed alias table: the 12 Elena GIF names resolve to themselves and every
 // received alias points at one of those same files. No path is ever built from
 // a received name.
-struct AvatarEmotionAlias {
-    const char* from;
-    const char* to;
-};
-
 constexpr AvatarEmotionAlias kAvatarEmotionAliases[] = {
     {"neutral", kNeutral},
     {"listening", kListening},
@@ -100,6 +95,14 @@ const char* NormalizeAvatarEmotion(std::string_view name) {
         }
     }
     return kNeutral;
+}
+
+std::size_t AvatarEmotionAliasCount() {
+    return sizeof(kAvatarEmotionAliases) / sizeof(kAvatarEmotionAliases[0]);
+}
+
+const AvatarEmotionAlias& AvatarEmotionAliasAt(std::size_t index) {
+    return kAvatarEmotionAliases[index];
 }
 
 bool AvatarController::IsMaintenance(uint64_t now_ms) const {

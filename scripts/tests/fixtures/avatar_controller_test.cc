@@ -674,6 +674,23 @@ void TestCancellationClearsEmotion() {
 }  // namespace
 
 int main(int argc, char** argv) {
+    // The alias table is also read from Python, so that assets/aliases.json and
+    // this code can be compared entry by entry.
+    if (argc >= 2 && std::string_view(argv[1]) == "alias_count") {
+        std::printf("%zu\n", AvatarEmotionAliasCount());
+        return 0;
+    }
+    if (argc >= 3 && std::string_view(argv[1]) == "alias") {
+        const std::size_t index = std::stoul(argv[2]);
+        if (index >= AvatarEmotionAliasCount()) {
+            std::fprintf(stderr, "alias index out of range: %s\n", argv[2]);
+            return 2;
+        }
+        const AvatarEmotionAlias& alias = AvatarEmotionAliasAt(index);
+        std::printf("%s %s\n", alias.from, alias.to);
+        return 0;
+    }
+
     const std::map<std::string, void (*)()> cases = {
         {"test_stop_requires_drained", TestStopRequiresDrained},
         {"test_new_turn_rejects_stale_callbacks", TestNewTurnRejectsStaleCallbacks},

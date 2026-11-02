@@ -21,6 +21,16 @@ bool IsValidAvatarEmotionName(std::string_view name);
 // string; unknown, empty, invalid or over-long input resolves to "neutral".
 const char* NormalizeAvatarEmotion(std::string_view name);
 
+// One entry of that fixed table. It is exposed so packaging and tests can prove
+// that assets/aliases.json and this code resolve the same table.
+struct AvatarEmotionAlias {
+    const char* from;
+    const char* to;
+};
+
+std::size_t AvatarEmotionAliasCount();
+const AvatarEmotionAlias& AvatarEmotionAliasAt(std::size_t index);
+
 // Resolved presentation. Every `emotion` points to static storage.
 struct AvatarPresentation {
     const char* emotion = "neutral";
