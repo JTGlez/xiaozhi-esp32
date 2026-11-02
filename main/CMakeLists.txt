@@ -926,10 +926,15 @@ file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.c
 )
-if(AVATAR_RENDERER STREQUAL "image")
-    list(FILTER BOARD_SOURCES EXCLUDE REGEX "/(elena_avatar_display|avatar_controller)\\.cc$")
+if(AVATAR_RENDERER STREQUAL "gif")
+    list(FILTER BOARD_SOURCES EXCLUDE REGEX "/image_avatar_(renderer|factory)\\.cc$")
+elseif(AVATAR_RENDERER STREQUAL "image")
+    list(FILTER BOARD_SOURCES EXCLUDE REGEX "/gif_avatar_(renderer|factory)\\.cc$")
+elseif(AVATAR_RENDERER STREQUAL "custom")
+    list(FILTER BOARD_SOURCES EXCLUDE REGEX "/(gif|image)_avatar_(renderer|factory)\\.cc$")
+    list(APPEND SOURCES "${AVATAR_DIR}/renderer.cc")
+    list(APPEND INCLUDE_DIRS "boards/elena-stackchan")
 endif()
-list(FILTER BOARD_SOURCES EXCLUDE REGEX "/(gif_avatar_renderer|gif_avatar_factory|image_avatar_renderer|image_avatar_factory)\\.cc$")
 list(APPEND SOURCES ${BOARD_SOURCES})
 
 # Select one audio engine for each chip family

@@ -50,6 +50,13 @@ typedef uint32_t lv_color_format_t;
 #define LV_OPA_COVER 255
 
 #define LV_SIZE_CONTENT ((lv_coord_t)0x7FE00000)
+#define LV_COORD_MAX ((lv_coord_t)((1 << 29) - 1))
+#define LV_RADIUS_CIRCLE 0x7FFF
+
+typedef struct {
+    int32_t x;
+    int32_t y;
+} lv_point_t;
 
 typedef struct {
     uint32_t val; /* packed 0xRRGGBB */
@@ -169,6 +176,12 @@ typedef struct _lv_font_t {
 bool lv_font_get_glyph_dsc_fmt_txt(const lv_font_t* font, uint32_t letter, uint32_t letter_next,
                                    void* glyph_out);
 const void* lv_font_get_bitmap_fmt_txt(const void* letter_bitmap_dsc, uint32_t glyph_index);
+
+/* Width strlen * 10 and height 20, so tests can predict a label's size. */
+typedef enum { LV_TEXT_FLAG_NONE = 0 } lv_text_flag_t;
+void lv_text_get_size(lv_point_t* size_res, const char* text, const lv_font_t* font,
+                      int32_t letter_space, int32_t line_space, int32_t max_width,
+                      lv_text_flag_t flag);
 
 /* ---------------------------------------------------------------- display */
 typedef struct _lv_obj_t lv_obj_t;
@@ -465,6 +478,9 @@ lv_coord_t host_lvgl_obj_y(const lv_obj_t* obj);
 lv_coord_t host_lvgl_obj_w(const lv_obj_t* obj);
 lv_coord_t host_lvgl_obj_h(const lv_obj_t* obj);
 const lv_font_t* host_lvgl_obj_font(const lv_obj_t* obj);
+uint32_t host_lvgl_obj_text_color(const lv_obj_t* obj);
+lv_label_long_mode_t host_lvgl_obj_long_mode(const lv_obj_t* obj);
+const lv_obj_t* host_lvgl_obj_parent(const lv_obj_t* obj);
 size_t host_lvgl_live_obj_count(void);
 bool host_lvgl_tree_has_text(const lv_obj_t* root, const char* needle);
 

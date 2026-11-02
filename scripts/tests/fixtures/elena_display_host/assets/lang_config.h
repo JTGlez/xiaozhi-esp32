@@ -7,6 +7,7 @@
 namespace Lang {
 namespace Strings {
 inline constexpr const char* INITIALIZING = "XZ_STR_INITIALIZING";
+inline constexpr const char* ERROR = "XZ_STR_ERROR";
 inline constexpr const char* BATTERY_NEED_CHARGE = "XZ_STR_BATTERY_NEED_CHARGE";
 }  // namespace Strings
 namespace Sounds {

@@ -12,14 +12,19 @@ make firmware-image PURPOSE="elena avatar conversation"
 make firmware-image BOARD=m5stack/core-s3 BOARD_VARIANT=m5stack-core-s3 PURPOSE="generic comparison"
 ```
 
-The avatar's 320×240 GIFs are built by `scripts/elena_avatar_refit.py`. A transparent top
-strip holds the state text on the left and the battery, mute and connection indicators on
-the right. Conversation captions and the clock stay hidden. Operational notices use a second
-strip below it, and they and explicit previews retain their owners. One GIF decoder is used at a time; unavailable resources
-fall back once to neutral, then to the static RGB565 image in application flash.
-The generated header includes expected GIF sizes and CRCs, so damaged payloads
-never enter the decoder's unbounded raw-memory API. Resources, integrity data
-and aliases are build dependencies. The artwork was generated with AI (ChatGPT) and is MIT-licensed; its provenance is in `avatars/elena/PROVENANCE.md`.
+Each avatar is a folder of `avatars/`, selected at build time with `AVATAR=<name>`; the
+default is `elena`. Its `avatar.json` names a renderer, colors and art, and `AvatarStage`
+gives every avatar one UI: a transparent top bar with a status bubble on the left and the
+clock, connection, mute and battery indicators on the right, and a second strip below it for
+operational notices. Conversation captions never show, and previews retain their owners.
+The renderer draws in a layer below that UI; parent `docs/avatars.md` explains how to add one.
+
+Elena's 320×240 GIFs are built by `scripts/elena_avatar_refit.py`. One GIF decoder is used at
+a time; unavailable resources fall back once to neutral, then to the static RGB565 image in
+application flash. The generated header includes expected GIF sizes and CRCs, so damaged
+payloads never enter the decoder's unbounded raw-memory API. Resources, integrity data and
+aliases are build dependencies. The artwork was generated with AI (ChatGPT) and is
+MIT-licensed; its provenance is in `avatars/elena/PROVENANCE.md`.
 
 Events are optional through `Display`; other boards retain their interface
 behavior. The controller resolves activity on the main task; graphics and

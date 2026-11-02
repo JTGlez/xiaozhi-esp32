@@ -1,7 +1,7 @@
-"""Host tests for ElenaAvatarDisplay (Tarea 3 display portion).
+"""Host tests for AvatarStage.
 
 These tests compile and run the *real* production sources:
-  main/boards/elena-stackchan/elena_avatar_display.cc
+  main/boards/elena-stackchan/avatar_stage.cc, avatar_clock.cc, gif_avatar_renderer.cc
   main/boards/elena-stackchan/avatar_controller.cc
   main/display/display.cc, main/display/lcd_display.cc,
   main/display/lvgl_display/lvgl_display.cc, lvgl_theme.cc,
@@ -31,7 +31,9 @@ BOARD = ROOT / "main" / "boards" / "elena-stackchan"
 DISPLAY = ROOT / "main" / "display"
 LVGLD = DISPLAY / "lvgl_display"
 GIFD = LVGLD / "gif"
-HARNESS = FIXTURES / "elena_avatar_display_test.cc"
+HARNESS = FIXTURES / "avatar_stage_test.cc"
+CONTRACT_HARNESS = FIXTURES / "avatar_stage_contract_test.cc"
+FAKE_FACTORY = FIXTURES / "fake_avatar_factory.cc"
 GIFS_DIR = BOARD / "avatars" / "elena" / "gifs"
 FALLBACK_RGB565 = BOARD / "avatars" / "elena" / "neutral.rgb565"
 
@@ -44,10 +46,10 @@ C_FILES = (
     HOST / "esp_lvgl_port_host.c",
     GIFD / "gifdec.c",
 )
-CPP_FILES = (
-    HARNESS,
+SHARED_CPP = (
     HOST / "host_support.cc",
-    BOARD / "elena_avatar_display.cc",
+    BOARD / "avatar_stage.cc",
+    BOARD / "avatar_clock.cc",
     BOARD / "avatar_controller.cc",
     DISPLAY / "display.cc",
     DISPLAY / "lcd_display.cc",
@@ -59,8 +61,20 @@ CPP_FILES = (
     LVGLD / "gif" / "lvgl_gif.cc",
     DISPLAY / "text_glyph.cc",
 )
+STAGE_CPP = (
+    HARNESS,
+    BOARD / "gif_avatar_renderer.cc",
+    BOARD / "gif_avatar_factory.cc",
+)
+CONTRACT_CPP = (
+    CONTRACT_HARNESS,
+    FAKE_FACTORY,
+)
 PRODUCTION_CPP = (
-    BOARD / "elena_avatar_display.cc",
+    BOARD / "avatar_stage.cc",
+    BOARD / "avatar_clock.cc",
+    BOARD / "gif_avatar_renderer.cc",
+    BOARD / "gif_avatar_factory.cc",
     BOARD / "avatar_controller.cc",
 )
 
@@ -79,17 +93,18 @@ def run(command, cwd):
     return result
 
 
-class ElenaAvatarDisplayHarnessTest(unittest.TestCase):
+class AvatarStageHarnessTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmp = tempfile.TemporaryDirectory()
         cls.build_dir = Path(cls._tmp.name)
-        # Generate the static fallback header exactly with the packaging
-        # script the next brief will wire into CMake. It stays in the
-        # temporary build dir; the repo never carries a generated header.
+        # Generated into the temporary build dir, as the firmware build does.
         AVA.write_avatar_fallback_header(
             FALLBACK_RGB565, cls.build_dir / "elena_avatar_fallback.h"
         )
+        run([sys.executable, str(SCRIPTS / "avatar_pack.py"), "header",
+             "--avatar-dir", str(BOARD / "avatars" / "elena"),
+             "--out", str(cls.build_dir / "avatar_pack_config.h")], cls.build_dir)
         cc = shlex.split(os.environ.get("CC", "cc"))
         cxx = shlex.split(os.environ.get("CXX", "c++"))
         includes = [
@@ -97,33 +112,42 @@ class ElenaAvatarDisplayHarnessTest(unittest.TestCase):
             f"-I{DISPLAY}",
             f"-I{LVGLD}",
             f"-I{BOARD}",
+            f"-I{FIXTURES}",
             f"-I{cls.build_dir}",
         ]
-        objects = []
+
+        def compile_cpp(sources):
+            objects = []
+            for source in sources:
+                obj = cls.build_dir / (source.stem + ".o")
+                flags = ["-std=c++20", "-Wall"]
+                if source in PRODUCTION_CPP:
+                    flags.append("-Werror")
+                run(cxx + flags + includes + ["-c", str(source), "-o", str(obj)], cls.build_dir)
+                objects.append(obj)
+            return objects
+
+        shared = []
         for source in C_FILES:
             obj = cls.build_dir / (source.stem + ".o")
             run(cc + ["-std=gnu11", "-Wall", *includes, "-c", str(source),
                       "-o", str(obj)], cls.build_dir)
-            objects.append(obj)
-        for source in CPP_FILES:
-            obj = cls.build_dir / (source.stem + ".o")
-            flags = ["-std=c++20", "-Wall"]
-            if source in PRODUCTION_CPP:
-                flags.append("-Werror")
-            run(cxx + flags + includes + ["-c", str(source), "-o", str(obj)],
-                cls.build_dir)
-            objects.append(obj)
-        cls.binary = cls.build_dir / "elena_avatar_display_test"
-        run(cxx + [str(obj) for obj in objects] + ["-o", str(cls.binary)],
+            shared.append(obj)
+        shared += compile_cpp(SHARED_CPP)
+        cls.binary = cls.build_dir / "avatar_stage_test"
+        run(cxx + [str(obj) for obj in shared + compile_cpp(STAGE_CPP)] + ["-o", str(cls.binary)],
             cls.build_dir)
+        cls.contract_binary = cls.build_dir / "avatar_stage_contract_test"
+        run(cxx + [str(obj) for obj in shared + compile_cpp(CONTRACT_CPP)]
+            + ["-o", str(cls.contract_binary)], cls.build_dir)
 
     @classmethod
     def tearDownClass(cls):
         cls._tmp.cleanup()
 
-    def run_case(self, name):
+    def run_case(self, name, binary=None):
         result = subprocess.run(
-            [str(self.binary), name, str(GIFS_DIR)],
+            [str(binary or self.binary), name, str(GIFS_DIR)],
             capture_output=True,
             text=True,
         )
@@ -220,6 +244,30 @@ class ElenaAvatarDisplayHarnessTest(unittest.TestCase):
         self.run_case("state_text_beside_indicators")
         self.run_case("unchanged_tick_skips_display_lock")
         self.run_case("destruction_with_pending_timers")
+        self.run_case("layout_positions")
+
+    def test_status_bubble(self):
+        """Mutation targets: showing an empty bubble, letting long text move the
+        clock or wrap to a second line, or an error without its color and mark."""
+        self.run_case("bubble_hidden_while_empty")
+        self.run_case("bubble_long_text_keeps_dots_and_cap")
+        self.run_case("error_status_is_red_with_cross")
+
+    def test_clock_and_theme_keep_the_stage(self):
+        """Mutation targets: the clock writing the status, or a theme replacing
+        the transparent bar or the avatar's background."""
+        self.run_case("clock_never_writes_status")
+        self.run_case("top_bar_transparent_after_theme")
+
+    def test_renderer_contract(self):
+        """The stage drives a fake renderer: Attach once, Present only on changes,
+        power save forwarded, and nothing without the display lock."""
+        for name in ("attach_once", "present_only_on_changes", "present_on_notice_flag_change",
+                     "theme_reload_presents_again", "same_collection_theme_change_may_present_once",
+                     "preview_blocks_present", "power_save_forwarded", "failed_lock_calls_nothing",
+                     "renderer_gets_no_text"):
+            with self.subTest(name=name):
+                self.run_case(name, self.contract_binary)
 
 
 if __name__ == "__main__":

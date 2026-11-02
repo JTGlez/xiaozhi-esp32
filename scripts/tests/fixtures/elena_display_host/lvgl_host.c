@@ -127,6 +127,7 @@ struct _lv_obj_t {
     lv_coord_t align_dy;
     /* label */
     char* text;
+    lv_label_long_mode_t long_mode;
     /* image */
     const void* img_src;
     uint16_t scale;
@@ -531,9 +532,22 @@ const char* lv_label_get_text(const lv_obj_t* obj) {
     return lv_obj_is_valid(obj) && obj->text != NULL ? obj->text : "";
 }
 void lv_label_set_long_mode(lv_obj_t* obj, lv_label_long_mode_t mode) {
-    (void)mode;
-    if (lv_obj_is_valid(obj))
+    if (lv_obj_is_valid(obj)) {
+        obj->long_mode = mode;
         STYLE_EVENT(obj);
+    }
+}
+
+void lv_text_get_size(lv_point_t* size_res, const char* text, const lv_font_t* font,
+                      int32_t letter_space, int32_t line_space, int32_t max_width,
+                      lv_text_flag_t flag) {
+    (void)font;
+    (void)letter_space;
+    (void)line_space;
+    (void)max_width;
+    (void)flag;
+    size_res->x = (int32_t)strlen(text) * 10;
+    size_res->y = 20;
 }
 
 lv_res_t lv_image_set_src(lv_obj_t* obj, const void* src) {
@@ -717,6 +731,15 @@ lv_coord_t host_lvgl_obj_x(const lv_obj_t* obj) { return lv_obj_is_valid(obj) ? 
 lv_coord_t host_lvgl_obj_y(const lv_obj_t* obj) { return lv_obj_is_valid(obj) ? obj->y : 0; }
 lv_coord_t host_lvgl_obj_w(const lv_obj_t* obj) { return lv_obj_get_width(obj); }
 lv_coord_t host_lvgl_obj_h(const lv_obj_t* obj) { return lv_obj_get_height(obj); }
+uint32_t host_lvgl_obj_text_color(const lv_obj_t* obj) {
+    return lv_obj_is_valid(obj) ? obj->text_color.val : 0;
+}
+lv_label_long_mode_t host_lvgl_obj_long_mode(const lv_obj_t* obj) {
+    return lv_obj_is_valid(obj) ? obj->long_mode : LV_LABEL_LONG_WRAP;
+}
+const lv_obj_t* host_lvgl_obj_parent(const lv_obj_t* obj) {
+    return lv_obj_is_valid(obj) ? obj->parent : NULL;
+}
 const lv_font_t* host_lvgl_obj_font(const lv_obj_t* obj) {
     return lv_obj_is_valid(obj) ? obj->font : NULL;
 }

@@ -1,6 +1,6 @@
-/* Host harness for the ElenaAvatarDisplay tests.
+/* Host harness for the AvatarStage tests, with the real GIF renderer.
  *
- * It instantiates the REAL ElenaAvatarDisplay (which inherits the real
+ * It instantiates the REAL AvatarStage (which inherits the real
  * SpiLcdDisplay/LcdDisplay/LvglDisplay production classes) and drives it
  * through semantic events, then asserts observable widget state: hidden
  * flags, label text, image src, decoder identity, esp_timer registrations.
@@ -13,12 +13,15 @@
  * selector exits nonzero with a MISSING CASE diagnostic so the Python suite
  * can never report a fake PASS.
  */
-#include "elena_avatar_display.h"
+#include "avatar_stage.h"
 
+#include "assets/lang_config.h"
+#include "avatar_pack_config.h"
 #include "board.h"
 #include "emoji_collection.h"
 #include "esp_lvgl_port.h"
 #include "esp_timer.h"
+#include "gif_avatar_renderer.h"
 #include "lvgl.h"
 #include "lvgl_image.h"
 #include "lvgl_theme.h"
@@ -133,13 +136,18 @@ EmojiCollection* attach_theme(const std::shared_ptr<EmojiCollection>& collection
 
 /* Derived view: exposes the production protected widget pointers for
  * observation. Adds no behavior of its own. */
-class ElenaHarness : public ElenaAvatarDisplay {
+class StageHarness : public AvatarStage {
 public:
-    using ElenaAvatarDisplay::ElenaAvatarDisplay;
+    using AvatarStage::AvatarStage;
+
+    GifAvatarRenderer* gifRenderer() { return static_cast<GifAvatarRenderer*>(renderer()); }
+    lv_obj_t* statusBubble() { return status_bubble_; }
+    lv_obj_t* clockLabel() { return clock_label_; }
+    lv_obj_t* tail(size_t index) { return tail_[index]; }
 
     lv_obj_t* statusLabel() { return status_label_; }
     lv_obj_t* notificationLabel() { return notification_label_; }
-    lv_obj_t* emojiImage() { return emoji_image_; }
+    lv_obj_t* emojiImage() { return gifRenderer() ? gifRenderer()->image() : nullptr; }
     lv_obj_t* emojiLabel() { return emoji_label_; }
     lv_obj_t* emojiBox() { return emoji_box_; }
     lv_obj_t* previewImage() { return preview_image_; }
@@ -151,16 +159,16 @@ public:
     lv_obj_t* batteryLabel() { return battery_label_; }
     lv_obj_t* networkLabel() { return network_label_; }
     lv_obj_t* muteLabel() { return mute_label_; }
-    LvglGif* gif() { return gif_controller_.get(); }
+    LvglGif* gif() { return gifRenderer() ? gifRenderer()->gif() : nullptr; }
     const lv_img_dsc_t* emoji_src() {
-        return static_cast<const lv_img_dsc_t*>(host_lvgl_obj_img_src(emoji_image_));
+        return static_cast<const lv_img_dsc_t*>(host_lvgl_obj_img_src(emojiImage()));
     }
 };
 
-std::unique_ptr<ElenaHarness> make_display() {
+std::unique_ptr<StageHarness> make_display() {
     static int io_stub = 0x10;
     static int panel_stub = 0x20;
-    return std::make_unique<ElenaHarness>(reinterpret_cast<esp_lcd_panel_io_handle_t>(&io_stub),
+    return std::make_unique<StageHarness>(reinterpret_cast<esp_lcd_panel_io_handle_t>(&io_stub),
                                           reinterpret_cast<esp_lcd_panel_handle_t>(&panel_stub),
                                           320, 240, 0, 0, false, false, false);
 }
@@ -178,7 +186,7 @@ ConversationVisualEvent event_of(ConversationVisualEventKind kind, uint64_t now,
     return event;
 }
 
-void handle(ElenaHarness* display, const ConversationVisualEvent& event) {
+void handle(StageHarness* display, const ConversationVisualEvent& event) {
     display->OnConversationVisualEvent(event);
 }
 
@@ -336,7 +344,7 @@ int case_behavior(const std::string& selector, const std::string& dir) {
             display->ShowNotification(std::string("VOLUME"), 20);
         else
             display->ShowNotification("VOLUME", 20);
-        host_esp_timer_fire("elena_notification_expiry");
+        host_esp_timer_fire("avatar_notification_expiry");
         display->UpdateStatusBar(true);
         if (selector == "notice_survives_notification")
             CHECK(tree_has("ALERT-OWNER"), "notification hid persistent notice");
@@ -421,7 +429,7 @@ int case_behavior(const std::string& selector, const std::string& dir) {
         CHECK(std::strcmp(text_of(display->statusLabel()), "STATE-TEXT") == 0,
               "notification replaced the state text");
         CHECK(!hidden(display->batteryLabel()), "notification hid the indicators");
-        host_esp_timer_fire("elena_notification_expiry");
+        host_esp_timer_fire("avatar_notification_expiry");
         CHECK(!hidden(display->statusLabel()), "state text lost after the notification");
         display->UpdateStatusBar(true);
         CHECK(std::strcmp(text_of(display->statusLabel()), "STATE-TEXT") == 0,
@@ -438,6 +446,73 @@ int case_behavior(const std::string& selector, const std::string& dir) {
                                            ConversationActivity::Listening));
         CHECK(host_lvgl_port_lock_attempts() == log, "unchanged tick took the display lock");
         host_lvgl_port_fail_next_locks(0);
+    } else if (selector == "bubble_hidden_while_empty") {
+        CHECK(hidden(display->statusBubble()), "empty bubble visible");
+        for (size_t i = 0; i < 4; ++i)
+            CHECK(hidden(display->tail(i)), "tail of an empty bubble visible");
+        display->SetStatus("X");
+        CHECK(!hidden(display->statusBubble()), "bubble did not appear");
+        for (size_t i = 0; i < 4; ++i)
+            CHECK(!hidden(display->tail(i)), "tail did not appear");
+    } else if (selector == "bubble_long_text_keeps_dots_and_cap") {
+        auto* parent = host_lvgl_obj_parent(display->clockLabel());
+        auto x = host_lvgl_obj_x(display->clockLabel());
+        auto y = host_lvgl_obj_y(display->clockLabel());
+        display->SetStatus(std::string(100, 'A').c_str());
+        CHECK(host_lvgl_obj_w(display->statusLabel()) == 176, "long text passed the cap");
+        CHECK(host_lvgl_obj_long_mode(display->statusLabel()) == LV_LABEL_LONG_MODE_DOTS,
+              "long text must end in dots");
+        // LVGL wraps a label of content height instead of adding dots.
+        CHECK(host_lvgl_obj_h(display->statusLabel()) == 20, "bubble must hold a single line");
+        CHECK(host_lvgl_obj_parent(display->clockLabel()) == parent, "clock moved");
+        CHECK(host_lvgl_obj_x(display->clockLabel()) == x &&
+                  host_lvgl_obj_y(display->clockLabel()) == y,
+              "clock moved");
+        display->SetStatus("OK");
+        CHECK(host_lvgl_obj_w(display->statusLabel()) == 21, "short text kept the long width");
+    } else if (selector == "error_status_is_red_with_cross") {
+        display->SetStatus(Lang::Strings::ERROR);
+        CHECK(std::strcmp(text_of(display->statusLabel()), "\xC3\x97 XZ_STR_ERROR") == 0,
+              "error needs its mark");
+        CHECK(host_lvgl_obj_bg_color(display->statusBubble()) == 0xC62828, "bubble not red");
+        CHECK(host_lvgl_obj_text_color(display->statusLabel()) == 0xFFFFFF, "text not white");
+        for (size_t i = 0; i < 4; ++i)
+            CHECK(host_lvgl_obj_bg_color(display->tail(i)) == 0xC62828, "tail not red");
+        display->SetTheme(theme_named("dark"));
+        CHECK(host_lvgl_obj_bg_color(display->statusBubble()) == 0xC62828,
+              "a theme change hid the error");
+        display->SetStatus("OK");
+        CHECK(std::strcmp(text_of(display->statusLabel()), "OK") == 0, "text not replaced");
+        CHECK(host_lvgl_obj_bg_color(display->statusBubble()) == AVATAR_ACCENT_COLOR,
+              "bubble stayed red");
+        CHECK(host_lvgl_obj_bg_color(display->tail(0)) == AVATAR_ACCENT_COLOR, "tail stayed red");
+        CHECK(host_lvgl_obj_text_color(display->statusLabel()) == AVATAR_ACCENT_TEXT_COLOR,
+              "text stayed white");
+    } else if (selector == "clock_never_writes_status") {
+        display->SetStatus("STATE-TEXT");
+        display->UpdateStatusBar(true);
+        CHECK(std::strcmp(text_of(display->statusLabel()), "STATE-TEXT") == 0,
+              "clock wrote the status");
+        CHECK(!hidden(display->clockLabel()), "clock hidden with the time set");
+        CHECK(std::strlen(text_of(display->clockLabel())) == 5, "clock text is not HH:MM");
+    } else if (selector == "top_bar_transparent_after_theme") {
+        display->SetTheme(theme_named("dark"));
+        CHECK(host_lvgl_obj_bg_opa(display->topBar()) == LV_OPA_TRANSP, "top bar opaque");
+        CHECK(host_lvgl_obj_bg_color(display->container()) == AVATAR_BACKGROUND_COLOR,
+              "theme replaced the avatar's background");
+    } else if (selector == "layout_positions") {
+        CHECK(host_lvgl_obj_w(display->topBar()) == 320 && host_lvgl_obj_h(display->topBar()) == 30,
+              "top bar size");
+        CHECK(host_lvgl_obj_x(display->statusBubble()) == 4 &&
+                  host_lvgl_obj_y(display->statusBubble()) == 3,
+              "bubble position");
+        const int widths[] = {14, 10, 6, 2};
+        for (size_t i = 0; i < 4; ++i) {
+            CHECK(host_lvgl_obj_w(display->tail(i)) == widths[i], "tail width");
+            CHECK(host_lvgl_obj_h(display->tail(i)) == 2, "tail height");
+            CHECK(host_lvgl_obj_x(display->tail(i)) == 37 - widths[i] / 2, "tail x");
+            CHECK(host_lvgl_obj_y(display->tail(i)) == 27 + static_cast<int>(i) * 2, "tail y");
+        }
     } else if (selector == "lock_failure_no_mutation") {
         auto allocations = host_lvgl_big_alloc_count();
         host_lvgl_reset_log();
@@ -451,7 +526,7 @@ int case_behavior(const std::string& selector, const std::string& dir) {
         display->SetPreviewImage(make_preview_image(dir));
         display.reset();
         CHECK(host_esp_timer_live_count("preview_timer") == 0, "preview timer survived owner");
-        CHECK(host_esp_timer_live_count("elena_notification_expiry") == 0,
+        CHECK(host_esp_timer_live_count("avatar_notification_expiry") == 0,
               "notification timer survived owner");
     } else {
         // All failure cases use a new collection, so no stale borrowed assets.
