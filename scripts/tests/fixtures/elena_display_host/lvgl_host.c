@@ -478,6 +478,11 @@ void lv_obj_set_style_scrollbar_mode(lv_obj_t* obj, int mode, uint32_t part) {
     if (lv_obj_is_valid(obj))
         STYLE_EVENT(obj);
 }
+void lv_obj_set_flex_grow(lv_obj_t* obj, uint8_t grow) {
+    (void)obj;
+    (void)grow;
+}
+
 void lv_obj_set_flex_flow(lv_obj_t* obj, lv_flex_flow_t flow) {
     (void)flow;
     if (lv_obj_is_valid(obj))

@@ -213,7 +213,11 @@ typedef enum {
     LV_TEXT_ALIGN_CENTER = 1,
     LV_TEXT_ALIGN_RIGHT = 2
 } lv_text_align_t;
-typedef enum { LV_LABEL_LONG_WRAP = 0, LV_LABEL_LONG_SCROLL_CIRCULAR = 2 } lv_label_long_mode_t;
+typedef enum {
+    LV_LABEL_LONG_WRAP = 0,
+    LV_LABEL_LONG_MODE_DOTS = 1,
+    LV_LABEL_LONG_SCROLL_CIRCULAR = 2
+} lv_label_long_mode_t;
 
 typedef enum {
     LV_ALIGN_DEFAULT = 0,
@@ -277,6 +281,7 @@ void lv_obj_set_style_pad_gap(lv_obj_t* obj, lv_coord_t pad, uint32_t part);
 void lv_obj_set_style_margin_left(lv_obj_t* obj, lv_coord_t m, uint32_t part);
 void lv_obj_set_style_scrollbar_mode(lv_obj_t* obj, int mode, uint32_t part);
 void lv_obj_set_flex_flow(lv_obj_t* obj, lv_flex_flow_t flow);
+void lv_obj_set_flex_grow(lv_obj_t* obj, uint8_t grow);
 void lv_obj_set_flex_align(lv_obj_t* obj, lv_flex_align_t main, lv_flex_align_t cross,
                            lv_flex_align_t track);
 void lv_obj_set_style_layout(lv_obj_t* obj, lv_layout_t layout, uint32_t part);

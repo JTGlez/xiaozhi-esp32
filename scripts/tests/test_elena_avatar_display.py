@@ -217,6 +217,8 @@ class ElenaAvatarDisplayHarnessTest(unittest.TestCase):
         notification/preview timers are still armed."""
         self.run_case("layout_idempotent")
         self.run_case("lock_failure_no_mutation")
+        self.run_case("state_text_beside_indicators")
+        self.run_case("unchanged_tick_skips_display_lock")
         self.run_case("destruction_with_pending_timers")
 
 

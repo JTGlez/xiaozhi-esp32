@@ -724,6 +724,51 @@ void TestNewStartCancelsPendingStop() {
     ExpectResolvedEmotion("test_new_start_cancels_pending_stop", c, 500, "neutral");
 }
 
+void TestSpeakingWaitsForAudio() {
+    const char* name = "test_speaking_waits_for_audio";
+    // tts.start precedes the first audio by seconds: the wait stays on screen.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, true, Activity::Idle));
+        c.Handle(Ev(Kind::FinalTranscript, 1, 100));
+        ExpectResolvedEmotion(name, c, 100, "thinking");
+        c.Handle(Ev(Kind::TtsStarted, 1, 200, 0, true));
+        ExpectResolvedEmotion(name, c, 200, "thinking");
+        c.Handle(Ev(Kind::PlaybackState, 1, 300, 0, true));
+        ExpectResolvedEmotion(name, c, 300, "thinking");
+        c.Handle(Ev(Kind::AudioActivity, 1, 400));
+        ExpectResolvedEmotion(name, c, 400, "speaking");
+    }
+    // Playback reported busy counts as audio too.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, true, Activity::Idle));
+        c.Handle(Ev(Kind::TtsStarted, 1, 200, 0, true));
+        ExpectResolvedEmotion(name, c, 200, "neutral");
+        c.Handle(Ev(Kind::PlaybackState, 1, 300, 0, false));
+        ExpectResolvedEmotion(name, c, 300, "speaking");
+    }
+    // A stop without any audio closes the cycle; it never flashes speaking.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, true, Activity::Idle));
+        c.Handle(Ev(Kind::TtsStarted, 1, 200, 0, true));
+        c.Handle(Ev(Kind::TtsStopped, 1, 300, 0, true));
+        ExpectResolvedEmotion(name, c, 300, "neutral");
+        c.Handle(Ev(Kind::AudioActivity, 1, 400));
+        ExpectResolvedEmotion(name, c, 400, "neutral");
+    }
+    // A start that never produces audio still recovers at 30 s.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, true, Activity::Idle));
+        c.Handle(Ev(Kind::TtsStarted, 1, 200, 0, true));
+        c.Handle(Ev(Kind::Tick, 1, 30300));
+        c.Handle(Ev(Kind::AudioActivity, 1, 30400));
+        ExpectResolvedEmotion(name, c, 30400, "neutral");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -768,6 +813,7 @@ int main(int argc, char** argv) {
         {"test_notification_playback_id_checks", TestNotificationPlaybackIdChecks},
         {"test_cancellation_clears_emotion", TestCancellationClearsEmotion},
         {"test_new_start_cancels_pending_stop", TestNewStartCancelsPendingStop},
+        {"test_speaking_waits_for_audio", TestSpeakingWaitsForAudio},
     };
 
     if (argc < 2) {

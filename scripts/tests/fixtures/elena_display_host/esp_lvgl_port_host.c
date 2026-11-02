@@ -12,6 +12,9 @@ static size_t g_fail_locks = 0;
 
 void host_lvgl_port_fail_next_locks(size_t n) { g_fail_locks = n; }
 
+static size_t g_lock_attempts = 0;
+size_t host_lvgl_port_lock_attempts(void) { return g_lock_attempts; }
+
 esp_err_t lvgl_port_init(const lvgl_port_cfg_t* cfg) {
     (void)cfg;
     return ESP_OK;
@@ -39,6 +42,7 @@ lv_display_t* lvgl_port_add_disp_dsi(const lvgl_port_display_cfg_t* cfg,
 
 bool lvgl_port_lock(uint32_t timeout_ms) {
     (void)timeout_ms;
+    ++g_lock_attempts;
     if (g_fail_locks > 0) {
         --g_fail_locks;
         host_lvgl_log_event(HOST_LOCK_REJECTED, NULL, 0);

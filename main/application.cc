@@ -614,6 +614,9 @@ void Application::InitializeProtocol() {
 
     protocol_->OnAudioChannelOpened([this, codec, &board]() {
         board.SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
+        // Only MQTT reports OnConnected; on WebSocket the alert would never clear.
+        if (conversation_visuals_enabled_)
+            DismissAlert();
         if (protocol_->server_sample_rate() != codec->output_sample_rate()) {
             ESP_LOGW(TAG,
                      "Server sample rate %d does not match device output sample rate %d, "

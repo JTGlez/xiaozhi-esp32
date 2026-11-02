@@ -59,6 +59,8 @@ public:
 private:
     bool IsMaintenance(uint64_t now_ms) const;
     bool IsSpeaking(uint64_t now_ms) const;
+    bool IsTtsCycleOpen(uint64_t now_ms) const;
+    void MarkTtsAudio();
     bool IsThinking(uint64_t now_ms) const;
     bool IsMoodActive(uint64_t now_ms) const;
     uint64_t CycleEndMs(uint64_t now_ms) const;
@@ -75,6 +77,7 @@ private:
     uint64_t thinking_deadline_ms_ = 0;
 
     bool tts_cycle_active_ = false;
+    bool tts_audio_seen_ = false;
     bool tts_stop_pending_ = false;
     uint64_t last_audio_ms_ = 0;
     bool playback_idle_ = true;

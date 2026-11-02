@@ -207,7 +207,6 @@ int case_hidden_conversation(const std::string& dir) {
 
     CHECK(display->bottomBar() == nullptr, "Elena must never create a bottom bar");
     CHECK(display->chatLabel() == nullptr, "Elena must never create a chat label");
-    CHECK(hidden(display->statusLabel()), "status label must start hidden");
     CHECK(std::strcmp(text_of(display->statusLabel()), "") == 0,
           "status label must start with no text");
     CHECK(hidden(display->notificationLabel()), "notification label must start hidden");
@@ -216,7 +215,6 @@ int case_hidden_conversation(const std::string& dir) {
 
     auto assert_hidden = [&](const char* needle) {
         CHECK(!tree_has(needle), "conversation text reached the widget tree");
-        CHECK(hidden(display->statusLabel()), "status label became visible");
         CHECK(std::strcmp(text_of(display->statusLabel()), "") == 0,
               "status label retained conversation text");
         CHECK(hidden(display->notificationLabel()), "notification label became visible");
@@ -259,10 +257,6 @@ int case_hidden_conversation(const std::string& dir) {
     display->SetTheme(theme_named("dark"));
     display->SetChatMessage("user", "CAP-THEME-55");
     assert_hidden("CAP-THEME-55");
-
-    // Conversation-style SetStatus (no semantic notice owner) stays hidden.
-    display->SetStatus("CAP-STATUS-66");
-    assert_hidden("CAP-STATUS-66");
 
     // The emoji label font fallback must never surface any of this.
     CHECK(hidden(display->emojiLabel()), "font-emoji label became visible");
@@ -347,7 +341,8 @@ int case_behavior(const std::string& selector, const std::string& dir) {
         if (selector == "notice_survives_notification")
             CHECK(tree_has("ALERT-OWNER"), "notification hid persistent notice");
         else
-            CHECK(hidden(display->statusLabel()), "notification/clock restored normal status");
+            CHECK(std::strcmp(text_of(display->statusLabel()), "") == 0,
+                  "notification or clock wrote the state text");
     } else if (selector.find("preview_") == 0) {
         if (selector == "preview_notice_priority") {
             handle(display.get(), event_of(ConversationVisualEventKind::NoticeStarted, 1000));
@@ -387,7 +382,7 @@ int case_behavior(const std::string& selector, const std::string& dir) {
             theme_named(selector == "theme_switch_during_speaking" ? "dark" : "light"));
         CHECK(display->gif() && display->gif()->IsPlaying(), "reload lost speaking");
         CHECK(host_lvgl_big_alloc_count() > allocations, "new assets not reloaded");
-        CHECK(hidden(display->statusLabel()), "theme restored clock");
+        CHECK(std::strcmp(text_of(display->statusLabel()), "") == 0, "theme restored clock");
         CHECK(host_lvgl_obj_bg_opa(display->topBar()) == LV_OPA_TRANSP,
               "theme made top strip opaque");
     } else if (selector == "status_bar_indicators" || selector == "low_battery_popup") {
@@ -399,7 +394,50 @@ int case_behavior(const std::string& selector, const std::string& dir) {
         CHECK(std::strlen(text_of(display->batteryLabel())) != 0, "battery icon lost");
         if (selector == "low_battery_popup")
             CHECK(!hidden(display->lowBatteryPopup()), "low battery warning lost");
-        CHECK(hidden(display->statusLabel()), "status clock visible");
+        CHECK(std::strcmp(text_of(display->statusLabel()), "") == 0, "status clock visible");
+    } else if (selector == "state_text_beside_indicators") {
+        host_board_set_battery(50, false, true);
+        display->UpdateStatusBar(true);
+        handle(display.get(), event_of(ConversationVisualEventKind::TurnStarted, 1000, 1,
+                                       ConversationActivity::Listening));
+        display->SetStatus("STATE-TEXT");
+        CHECK(!hidden(display->statusLabel()), "state text hidden");
+        CHECK(std::strcmp(text_of(display->statusLabel()), "STATE-TEXT") == 0, "state text lost");
+        CHECK(!hidden(display->topBar()) && !hidden(display->batteryLabel()), "indicators hidden");
+        display->SetChatMessage("assistant", "SPOKEN-SECRET");
+        display->SetChatMessage("user", "HEARD-SECRET");
+        CHECK(!tree_has("SPOKEN-SECRET") && !tree_has("HEARD-SECRET"), "conversation on screen");
+        // A notice and a notification add a strip; they never replace the top one.
+        handle(display.get(), event_of(ConversationVisualEventKind::NoticeStarted, 1100));
+        display->SetChatMessage("system", "CONFIG-OPERATION");
+        CHECK(tree_has("CONFIG-OPERATION"), "notice hidden");
+        CHECK(std::strcmp(text_of(display->statusLabel()), "STATE-TEXT") == 0,
+              "notice replaced the state text");
+        CHECK(!hidden(display->topBar()) && !hidden(display->batteryLabel()),
+              "notice hid the indicators");
+        handle(display.get(), event_of(ConversationVisualEventKind::NoticeCleared, 1200));
+        CHECK(!tree_has("CONFIG-OPERATION"), "notice stayed");
+        display->ShowNotification("VOLUME", 20);
+        CHECK(std::strcmp(text_of(display->statusLabel()), "STATE-TEXT") == 0,
+              "notification replaced the state text");
+        CHECK(!hidden(display->batteryLabel()), "notification hid the indicators");
+        host_esp_timer_fire("elena_notification_expiry");
+        CHECK(!hidden(display->statusLabel()), "state text lost after the notification");
+        display->UpdateStatusBar(true);
+        CHECK(std::strcmp(text_of(display->statusLabel()), "STATE-TEXT") == 0,
+              "clock replaced the state text");
+    } else if (selector == "unchanged_tick_skips_display_lock") {
+        // The 20 Hz tick must not take the LVGL lock when nothing changes: the
+        // main task would block on, and boost, a render in progress.
+        handle(display.get(), event_of(ConversationVisualEventKind::TurnStarted, 1000, 1,
+                                       ConversationActivity::Listening));
+        host_lvgl_port_fail_next_locks(1000);
+        auto log = host_lvgl_port_lock_attempts();
+        for (int i = 0; i < 20; ++i)
+            handle(display.get(), event_of(ConversationVisualEventKind::Tick, 1100 + i * 50, 1,
+                                           ConversationActivity::Listening));
+        CHECK(host_lvgl_port_lock_attempts() == log, "unchanged tick took the display lock");
+        host_lvgl_port_fail_next_locks(0);
     } else if (selector == "lock_failure_no_mutation") {
         auto allocations = host_lvgl_big_alloc_count();
         host_lvgl_reset_log();

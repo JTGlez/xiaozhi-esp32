@@ -131,12 +131,21 @@ bool AvatarController::IsSpeaking(uint64_t now_ms) const {
         // visual cycle. It never stops the notification itself.
         return !playback_idle_ || now_ms < last_audio_ms_ + kAvatarAudioIdleTimeoutMs;
     }
-    if (!tts_cycle_active_) {
-        return false;
-    }
+    // tts.start precedes the first audio by seconds: speaking starts with the audio.
+    return tts_cycle_active_ && tts_audio_seen_ && IsTtsCycleOpen(now_ms);
+}
+
+bool AvatarController::IsTtsCycleOpen(uint64_t now_ms) const {
     // Pending playback always owns the view. Recovery requires BOTH idle
     // playback and 30 s without accepted audio; a timer never hides queued audio.
     return !playback_idle_ || now_ms < last_audio_ms_ + kAvatarAudioIdleTimeoutMs;
+}
+
+void AvatarController::MarkTtsAudio() {
+    if (tts_cycle_active_) {
+        tts_audio_seen_ = true;
+        thinking_active_ = false;
+    }
 }
 
 uint64_t AvatarController::CycleEndMs(uint64_t now_ms) const {
@@ -175,6 +184,7 @@ void AvatarController::EndSpeakingCycle(uint64_t now_ms, const char* reason) {
     // Event-driven completion uses the actual drain/stop time. Recovery
     // callers explicitly pass the expired deadline instead.
     tts_cycle_active_ = false;
+    tts_audio_seen_ = false;
     tts_stop_pending_ = false;
     notification_active_ = false;
     notification_finished_ = false;
@@ -187,6 +197,7 @@ void AvatarController::EndSpeakingCycle(uint64_t now_ms, const char* reason) {
 
 void AvatarController::CancelTurn(const char* reason) {
     tts_cycle_active_ = false;
+    tts_audio_seen_ = false;
     tts_stop_pending_ = false;
     notification_active_ = false;
     notification_finished_ = false;
@@ -200,7 +211,7 @@ void AvatarController::Sweep(uint64_t now_ms) {
     if (notification_active_ && !IsSpeaking(now_ms)) {
         EndSpeakingCycle(last_audio_ms_ + kAvatarAudioIdleTimeoutMs, "notification_timeout");
     }
-    if (tts_cycle_active_ && !IsSpeaking(now_ms)) {
+    if (tts_cycle_active_ && !IsTtsCycleOpen(now_ms)) {
         EndSpeakingCycle(last_audio_ms_ + kAvatarAudioIdleTimeoutMs, "audio_idle_timeout");
     }
     if (thinking_active_ && !IsThinking(now_ms)) {
@@ -292,9 +303,11 @@ void AvatarController::Handle(const ConversationVisualEvent& event) {
         case ConversationVisualEventKind::TtsStarted:
             if (!IsMaintenance(now_ms) && (!tts_cycle_active_ || tts_stop_pending_)) {
                 playback_idle_ = event.playback_idle;
-                // A valid answer also ends the visual wait.
-                thinking_active_ = false;
                 tts_cycle_active_ = true;
+                tts_audio_seen_ = false;
+                if (!event.playback_idle) {
+                    MarkTtsAudio();
+                }
                 // Another reply in the same turn: the earlier stop no longer
                 // describes the audio in the queue.
                 tts_stop_pending_ = false;
@@ -314,12 +327,14 @@ void AvatarController::Handle(const ConversationVisualEvent& event) {
                 tts_stop_pending_ = true;
                 playback_idle_ = false;
                 last_audio_ms_ = now_ms;
+                MarkTtsAudio();
             }
             break;
 
         case ConversationVisualEventKind::PlaybackState:
             playback_idle_ = event.playback_idle;
             if (!playback_idle_) {
+                MarkTtsAudio();
                 break;
             }
             if (notification_active_) {
@@ -339,6 +354,7 @@ void AvatarController::Handle(const ConversationVisualEvent& event) {
         case ConversationVisualEventKind::AudioActivity:
             // Accepted audio of the current cycle resets the recovery window.
             last_audio_ms_ = now_ms;
+            MarkTtsAudio();
             break;
 
         case ConversationVisualEventKind::NotificationStarted:

@@ -78,6 +78,7 @@ void lvgl_port_unlock(void);
 
 /* Host control: make the next n lock attempts fail. */
 void host_lvgl_port_fail_next_locks(size_t n);
+size_t host_lvgl_port_lock_attempts(void);
 
 #ifdef __cplusplus
 }

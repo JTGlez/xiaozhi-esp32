@@ -107,6 +107,11 @@ uint64_t ElenaAvatarDisplay::NowMs() {
     return static_cast<uint64_t>(esp_timer_get_time()) / 1000ULL;
 }
 
+AvatarPresentation ElenaAvatarDisplay::ResolveNow() {
+    std::lock_guard<std::mutex> guard(controller_mutex_);
+    return controller_.Resolve(NowMs());
+}
+
 void ElenaAvatarDisplay::SetupUI() {
     if (setup_ui_called_) {
         ESP_LOGW(TAG, "SetupUI already applied; skipping rebuild");
@@ -180,11 +185,19 @@ void ElenaAvatarDisplay::SetupUI() {
         lv_obj_set_style_radius(top_bar_, 0, LV_PART_MAIN);
         lv_obj_set_flex_flow(top_bar_, LV_FLEX_FLOW_ROW);
         lv_obj_set_style_pad_all(top_bar_, 2, LV_PART_MAIN);
-        lv_obj_set_flex_align(top_bar_, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
+        lv_obj_set_flex_align(top_bar_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
                               LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(top_bar_, 6, LV_PART_MAIN);
 
         lv_obj_set_style_bg_color(top_bar_, lvgl_theme->text_color(), LV_PART_MAIN);
         lv_obj_set_style_text_color(top_bar_, lv_color_hex(0x1F2937), LV_PART_MAIN);
+
+        // State text on the left; it grows, which pushes the icons to the right.
+        status_label_ = lv_label_create(top_bar_);
+        lv_obj_set_flex_grow(status_label_, 1);
+        lv_label_set_long_mode(status_label_, LV_LABEL_LONG_MODE_DOTS);
+        lv_label_set_text(status_label_, "");
+        lv_obj_set_style_text_color(status_label_, lv_color_hex(0x1F2937), LV_PART_MAIN);
 
         network_label_ = lv_label_create(top_bar_);
         mute_label_ = lv_label_create(top_bar_);
@@ -208,11 +221,12 @@ void ElenaAvatarDisplay::SetupUI() {
         lv_label_set_text(battery_label_, MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL);
         lv_obj_set_style_text_color(battery_label_, lv_color_hex(0x1F2937), LV_PART_MAIN);
 
-        // Operational message strip: starts empty and hidden. Elena starts
-        // with the avatar, never with "Initializing" or a clock.
+        // Operational message strip, below the indicators so it never replaces
+        // them: starts empty and hidden.
         status_bar_ = lv_obj_create(container_);
         lv_obj_set_size(status_bar_, LV_HOR_RES, LV_SIZE_CONTENT);
         lv_obj_set_style_align(status_bar_, LV_ALIGN_TOP_MID, LV_PART_MAIN);
+        lv_obj_set_pos(status_bar_, 0, kElenaTopStripHeight);
         lv_obj_remove_flag(status_bar_, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_bg_opa(status_bar_, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_bg_color(status_bar_, lv_color_hex(kElenaCanvasCream), LV_PART_MAIN);
@@ -228,13 +242,11 @@ void ElenaAvatarDisplay::SetupUI() {
         lv_label_set_text(notification_label_, "");
         lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
 
-        status_label_ = lv_label_create(status_bar_);
-        lv_obj_set_width(status_label_, LV_HOR_RES);
-        lv_label_set_long_mode(status_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        lv_obj_set_style_align(status_label_, LV_ALIGN_TOP_MID, LV_PART_MAIN);
-        lv_label_set_text(status_label_, "");
-        lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        notice_label_ = lv_label_create(status_bar_);
+        lv_obj_set_width(notice_label_, LV_HOR_RES);
+        lv_obj_set_style_align(notice_label_, LV_ALIGN_TOP_MID, LV_PART_MAIN);
+        lv_label_set_text(notice_label_, "");
+        lv_obj_add_flag(notice_label_, LV_OBJ_FLAG_HIDDEN);
 
         low_battery_popup_ = lv_obj_create(container_);
         lv_obj_set_scrollbar_mode(low_battery_popup_, LV_SCROLLBAR_MODE_OFF);
@@ -249,7 +261,7 @@ void ElenaAvatarDisplay::SetupUI() {
         lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
     }
 
-    ApplyPresentation(controller_.Resolve(NowMs()));
+    ApplyPresentation(ResolveNow());
 }
 
 void ElenaAvatarDisplay::ApplyElenaLayerLocked() {
@@ -285,6 +297,9 @@ void ElenaAvatarDisplay::ApplyElenaLayerLocked() {
         }
         if (mute_label_ != nullptr) {
             lv_obj_set_style_text_color(mute_label_, lv_color_hex(0x1F2937), LV_PART_MAIN);
+        }
+        if (status_label_ != nullptr) {
+            lv_obj_set_style_text_color(status_label_, lv_color_hex(0x1F2937), LV_PART_MAIN);
         }
     }
     if (status_bar_ != nullptr) {
@@ -328,7 +343,9 @@ void ElenaAvatarDisplay::SetTheme(Theme* theme) {
     applied_via_gif_ = false;
     failed_emotion_ = nullptr;
     failed_collection_ = nullptr;
-    ApplyPresentation(controller_.Resolve(NowMs()));
+    validated_collection_ = nullptr;
+    validated_count_ = 0;
+    ApplyPresentation(ResolveNow());
 }
 
 namespace {
@@ -360,9 +377,24 @@ const LvglImage* ElenaAvatarDisplay::GetValidGif(const char* emotion) const {
         return nullptr;
     }
     const LvglImage* image = collection->GetEmojiImage(emotion);
-    if (image == nullptr || !MatchesAvatarIntegrity(emotion, image->image_dsc()) ||
-        !ValidAvatarGif(image->image_dsc()) || !image->IsGif()) {
+    if (image == nullptr) {
         return nullptr;
+    }
+    if (validated_collection_ != collection.get()) {
+        validated_collection_ = collection.get();
+        validated_count_ = 0;
+    }
+    const lv_img_dsc_t* dsc = image->image_dsc();
+    for (size_t i = 0; i < validated_count_; ++i) {
+        if (validated_gifs_[i] == dsc) {
+            return image;
+        }
+    }
+    if (!MatchesAvatarIntegrity(emotion, dsc) || !ValidAvatarGif(dsc) || !image->IsGif()) {
+        return nullptr;
+    }
+    if (validated_count_ < validated_gifs_.size()) {
+        validated_gifs_[validated_count_++] = dsc;
     }
     return image;
 }
@@ -455,6 +487,11 @@ void ElenaAvatarDisplay::ApplyPresentation(const AvatarPresentation& presentatio
     DisplayLockGuard presentation_lock(this);
     if (!presentation_lock)
         return;
+    {
+        std::lock_guard<std::mutex> guard(controller_mutex_);
+        last_requested_ = presentation;
+        last_requested_valid_ = true;
+    }
     bool operational_owner = presentation.notice_active || presentation.maintenance;
 
     if (preview_open_) {
@@ -543,7 +580,11 @@ void ElenaAvatarDisplay::ApplyPresentation(const AvatarPresentation& presentatio
         return;
     }
 
-    ESP_LOGE(TAG, "Avatar assets unavailable, using static Elena fallback");
+    if (collection_ptr == nullptr) {
+        ESP_LOGI(TAG, "Assets not loaded yet, showing static Elena");
+    } else {
+        ESP_LOGE(TAG, "Avatar assets unavailable, using static Elena fallback");
+    }
     ShowStaticFallback();
     failed_emotion_ = presentation.emotion;
     failed_collection_ = collection_ptr;
@@ -564,47 +605,63 @@ void ElenaAvatarDisplay::SetEmotion(const char* emotion) {
     if (std::strcmp(emotion, "neutral") == 0) {
         // Legacy idle refresh: never erases semantic activity and is never
         // stored as a semantic emotion.
-        ApplyPresentation(controller_.Resolve(now));
+        ApplyPresentation(ResolveNow());
         return;
     }
-    ConversationVisualEvent event{};
-    event.kind = ConversationVisualEventKind::Emotion;
-    event.generation = controller_.generation();
-    event.now_ms = now;
-    event.emotion = normalized;
-    controller_.Handle(event);
-    ApplyPresentation(controller_.Resolve(now));
+    AvatarPresentation presentation;
+    {
+        std::lock_guard<std::mutex> guard(controller_mutex_);
+        ConversationVisualEvent event{};
+        event.kind = ConversationVisualEventKind::Emotion;
+        event.generation = controller_.generation();
+        event.now_ms = now;
+        event.emotion = normalized;
+        controller_.Handle(event);
+        presentation = controller_.Resolve(now);
+    }
+    ApplyPresentation(presentation);
 }
 
 void ElenaAvatarDisplay::OnConversationVisualEvent(const ConversationVisualEvent& event) {
-    DisplayLockGuard state_lock(this);
-    if (!state_lock)
-        return;
-    const char* previous_reason = controller_.ExpiryReason();
-    controller_.Handle(event);
-    const char* reason = controller_.ExpiryReason();
-    if (std::strcmp(reason, previous_reason) != 0 && *reason != '\0')
+    AvatarPresentation presentation;
+    bool unchanged;
+    const char* reason;
+    bool reason_changed;
+    {
+        std::lock_guard<std::mutex> guard(controller_mutex_);
+        const char* previous_reason = controller_.ExpiryReason();
+        controller_.Handle(event);
+        reason = controller_.ExpiryReason();
+        reason_changed = std::strcmp(reason, previous_reason) != 0 && *reason != '\0';
+        presentation = controller_.Resolve(event.now_ms);
+        unchanged = last_requested_valid_ && presentation == last_requested_;
+    }
+    if (reason_changed)
         ESP_LOGI(TAG, "Visual cycle: %s", reason);
-    ApplyPresentation(controller_.Resolve(event.now_ms));
+    // This runs at 20 Hz on the main task: without a visible change it must not
+    // wait for, and boost, a render holding the LVGL lock.
+    if (!unchanged)
+        ApplyPresentation(presentation);
 }
 
 void ElenaAvatarDisplay::ReassertOperationalLocked() {
-    if (status_label_ == nullptr) {
+    if (notice_label_ == nullptr || !notice_text_present_) {
         return;
     }
     lv_obj_remove_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(notice_label_, LV_OBJ_FLAG_HIDDEN);
     if (notification_label_ != nullptr) {
         lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
 void ElenaAvatarDisplay::ClearOperationalLocked() {
-    if (status_label_ != nullptr) {
-        lv_label_set_text(status_label_, "");
+    if (notice_label_ != nullptr) {
+        lv_label_set_text(notice_label_, "");
+        lv_obj_add_flag(notice_label_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
     }
+    notice_text_present_ = false;
     operational_text_active_ = false;
 }
 
@@ -622,24 +679,12 @@ void ElenaAvatarDisplay::SetStatus(const char* status) {
     if (status == nullptr || status[0] == '\0') {
         return;
     }
-    AvatarPresentation presentation = controller_.Resolve(NowMs());
-    if (!presentation.notice_active && !presentation.maintenance) {
-        // Conversation-style status is suppressed; Elena has no bottom bar
-        // either.
-        return;
-    }
-    DisplayLockGuard lock(this);
-    if (!lock) {
-        ESP_LOGE(TAG, "Cannot show operational status without the display lock");
-        return;
-    }
+    // State text only ("listening", "error"): the conversation never comes this way.
     lv_label_set_text(status_label_, status);
-    lv_obj_remove_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
-    if (notification_label_ != nullptr) {
-        lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
+    AvatarPresentation presentation = ResolveNow();
+    if (presentation.notice_active || presentation.maintenance) {
+        operational_text_active_ = true;
     }
-    operational_text_active_ = true;
 }
 
 void ElenaAvatarDisplay::SetChatMessage(const char* role, const char* content) {
@@ -651,16 +696,13 @@ void ElenaAvatarDisplay::SetChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
     if (!lock)
         return;
-    AvatarPresentation presentation = controller_.Resolve(NowMs());
+    AvatarPresentation presentation = ResolveNow();
     bool owner = presentation.notice_active || presentation.maintenance;
     if (owner && role != nullptr && std::strcmp(role, "system") == 0 && content != nullptr &&
         content[0] != '\0') {
-        lv_label_set_text(status_label_, content);
-        lv_obj_remove_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
-        if (notification_label_ != nullptr) {
-            lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-        }
+        lv_label_set_text(notice_label_, content);
+        notice_text_present_ = true;
+        ReassertOperationalLocked();
         operational_text_active_ = true;
     }
 }
@@ -672,7 +714,7 @@ void ElenaAvatarDisplay::ClearChatMessages() {
     DisplayLockGuard lock(this);
     if (!lock)
         return;
-    auto presentation = controller_.Resolve(NowMs());
+    auto presentation = ResolveNow();
     if (!presentation.notice_active && !presentation.maintenance)
         ClearOperationalLocked();
 }
@@ -702,12 +744,11 @@ void ElenaAvatarDisplay::OnNotificationExpiry(void* arg) {
     }
     if (self->notification_label_ != nullptr) {
         lv_obj_add_flag(self->notification_label_, LV_OBJ_FLAG_HIDDEN);
-        if (!self->operational_text_active_)
+        if (!self->notice_text_present_)
             lv_obj_add_flag(self->status_bar_, LV_OBJ_FLAG_HIDDEN);
     }
-    if (self->operational_text_active_ && self->status_label_ != nullptr) {
-        // Restore only an operational notice, never status_label_ itself.
-        lv_obj_remove_flag(self->status_label_, LV_OBJ_FLAG_HIDDEN);
+    if (self->notice_text_present_) {
+        lv_obj_remove_flag(self->notice_label_, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -718,8 +759,8 @@ void ElenaAvatarDisplay::ShowNotification(const char* notification, int duration
     if (!setup_ui_called_ || notification == nullptr) {
         return;
     }
-    AvatarPresentation presentation = controller_.Resolve(NowMs());
-    if ((presentation.notice_active || presentation.maintenance) && operational_text_active_) {
+    AvatarPresentation presentation = ResolveNow();
+    if ((presentation.notice_active || presentation.maintenance) && notice_text_present_) {
         ESP_LOGI(TAG, "Operational notice keeps priority over notifications");
         return;
     }
@@ -730,8 +771,8 @@ void ElenaAvatarDisplay::ShowNotification(const char* notification, int duration
     lv_obj_remove_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(notification_label_, notification);
     lv_obj_remove_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-    if (status_label_ != nullptr) {
-        lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+    if (notice_label_ != nullptr) {
+        lv_obj_add_flag(notice_label_, LV_OBJ_FLAG_HIDDEN);
     }
     EnsureNotificationTimer();
     esp_timer_stop(notification_expiry_timer_);
@@ -771,7 +812,7 @@ void ElenaAvatarDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
         return;
     }
     if (image != nullptr) {
-        AvatarPresentation presentation = controller_.Resolve(NowMs());
+        AvatarPresentation presentation = ResolveNow();
         if ((presentation.notice_active || presentation.maintenance) && operational_text_active_) {
             ESP_LOGI(TAG, "Preview blocked by an active operational notice");
             return;
@@ -787,7 +828,7 @@ void ElenaAvatarDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
     // cached old expression.
     ClosePreviewWidgets();
     if (!destructing_) {
-        ApplyPresentation(controller_.Resolve(NowMs()));
+        ApplyPresentation(ResolveNow());
     }
 }
 

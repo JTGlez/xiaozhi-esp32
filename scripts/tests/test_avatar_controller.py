@@ -34,6 +34,7 @@ CASES = (
     "test_notification_playback_id_checks",
     "test_cancellation_clears_emotion",
     "test_new_start_cancels_pending_stop",
+    "test_speaking_waits_for_audio",
 )
 
 

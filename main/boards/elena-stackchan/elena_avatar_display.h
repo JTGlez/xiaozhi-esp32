@@ -7,17 +7,24 @@
 #include <esp_timer.h>
 #include <lvgl.h>
 
+#include <array>
+#include <mutex>
+
 // Elena's avatar view: a SpiLcdDisplay specialization that keeps the GIF
 // engine, draws the full 320x240 canvas without scaling, adds a transparent
-// top indicator strip, never shows conversation text or the bottom bar, and
-// drives expressions from the semantic AvatarController instead of from
-// transcription wording. Routine base updates (clock, idle "neutral", chat
-// subtitles) are rejected here; only operational notices owned by a semantic
-// NoticeStarted/Maintenance activity can put text on screen.
+// top strip with the state text and the indicators, never shows conversation
+// text or the bottom bar, and drives expressions from the semantic
+// AvatarController instead of from transcription wording. Routine base updates
+// (clock, idle "neutral", chat subtitles) are rejected here; beyond the state
+// text, only operational notices owned by a semantic NoticeStarted/Maintenance
+// activity can put text on screen.
 class ElenaAvatarDisplay : public SpiLcdDisplay {
 public:
     // Cream kit background kept constant across themes (spec section 4).
     static constexpr uint32_t kElenaCanvasCream = 0xF9F0E9;
+    // The figure starts at y=30, so the indicators never cover it.
+    static constexpr int kElenaTopStripHeight = 28;
+    static constexpr size_t kMaxValidatedGifs = 16;
 
     ElenaAvatarDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel, int width,
                        int height, int offset_x, int offset_y, bool mirror_x, bool mirror_y,
@@ -58,10 +65,26 @@ private:
     void ApplyElenaLayerLocked();
     void EnsureNotificationTimer();
     static void OnNotificationExpiry(void* arg);
+    AvatarPresentation ResolveNow();
     static uint64_t NowMs();
 
+    // Short critical sections only, and never held while waiting for the
+    // LVGL lock: the conversation tick must not block on a render.
+    std::mutex controller_mutex_;
     AvatarController controller_;
+    AvatarPresentation last_requested_;
+    bool last_requested_valid_ = false;
     lv_img_dsc_t elena_fallback_dsc_{};
+
+    // Second strip, below the indicators, for operational notices.
+    lv_obj_t* notice_label_ = nullptr;
+    bool notice_text_present_ = false;
+
+    // GIFs whose checksum already passed in the current collection; the
+    // checksum walks the whole file, too slow for every expression change.
+    mutable const EmojiCollection* validated_collection_ = nullptr;
+    mutable std::array<const lv_img_dsc_t*, kMaxValidatedGifs> validated_gifs_{};
+    mutable size_t validated_count_ = 0;
 
     bool preview_open_ = false;
     bool routine_status_update_ = false;
