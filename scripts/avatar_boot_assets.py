@@ -7,7 +7,7 @@ The name is an image rather than a font: it is the only text in that typeface.
 Run this by hand when an avatar's art or name changes, and commit the output. The
 build never runs it, because it needs Pillow:
 
-    uv run --no-project --with pillow python scripts/avatar_boot_assets.py \
+    ../.venv-firmware/bin/python scripts/avatar_boot_assets.py \
         --avatar-dir main/boards/elena-stackchan/avatars/elena \
         --source ../assets/elena-readme.png \
         --font main/boards/elena-stackchan/avatars/fonts/CherryBombOne-Regular.ttf \

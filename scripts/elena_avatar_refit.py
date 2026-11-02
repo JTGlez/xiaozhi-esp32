@@ -12,7 +12,7 @@ single frame because the microphone is being encoded while it shows.
 
 Requires Pillow and the kit, which is not tracked:
 
-    python3 scripts/elena_avatar_refit.py --kit <kit folder>
+    ../.venv-firmware/bin/python scripts/elena_avatar_refit.py --kit <kit folder>
 """
 
 from __future__ import annotations

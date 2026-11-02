@@ -24,7 +24,7 @@ while it shows and a redraw there competes with the encoder. The kit's `gifs-hq/
 `preview.png`, `sprite_sheet.*` and viseme headers are not inputs to this binary.
 
 ```sh
-python3 scripts/elena_avatar_refit.py --kit <kit folder>
+../.venv-firmware/bin/python scripts/elena_avatar_refit.py --kit <kit folder>
 ```
 
 | File | Bytes | Frames per loop | Canvas |
