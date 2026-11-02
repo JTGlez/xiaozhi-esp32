@@ -114,32 +114,15 @@ Antes de esta entrega un respaldo corruptado pasaba la validación; la prueba
 `test_validate_rejects_fallback_of_wrong_size` y
 `test_fallback_rejects_short_decoder_output` verifican cada guardián.
 
-## Licencia
+## Arte y licencia
 
-El kit **no declara ninguna licencia**: ni su `README.md`, ni sus archivos sueltos, ni su
-carpeta `source/` incluyen aviso de licencia para la ilustración. La identidad de Elena
-(cabello marfil, platinado en v3, laurel, toga) es suya, y sus archivos difieren byte a
-byte de las animaciones del proyecto de referencia.
+**Aviso: este arte se generó con IA.** Según su autor, Elena es un personaje original del
+proyecto, creado con ChatGPT. Sus archivos difieren byte a byte de las animaciones del
+proyecto de referencia (`dax8it/nous-girl-stackchan`), del que el kit solo toma nombres,
+alias y convenciones (`docs/SPRITES.md`).
 
-El proyecto de referencia (`dax8it/nous-girl-stackchan`, cuya copia consultada está en
-`vendor/firmwares/nous-girl-stackchan/`) licencia su código y sus documentos con MIT, y
-declara el arte aparte: `faces/starter/` es CC0, mientras que `faces/tribute/` **no está
-bajo ninguna licencia abierta** — solo uso personal y no comercial. El kit de Elena usa
-los nombres, el alias `_emote_aliases.json` y las convenciones de esa guía
-(`docs/SPRITES.md`), pero no se documenta que su ilustración derive de ese arte sin
-licencia, ni quién la creó. El recolor v3 parte del arte de v2.1-fit y no añade ninguna
-licencia.
-
-Consecuencia registrada sin suposiciones:
-
-- No se afirma aquí que estos GIFs estén bajo MIT, CC0 ni ninguna otra licencia: **no hay
-  licencia concedida documentada para el arte**.
-- Se conservan en el árbol de la placa por procedencia interna del proyecto, con sus
-  hashes, para poder compilarlos.
-- Los forks de este proyecto son públicos. Antes de publicar o distribuir esta entrega
-  fuera del proyecto propio hace falta autorización del autor del arte. Si esa
-  autorización no llega, la alternativa es sustituir los 12 GIFs por los de
-  `faces/starter/` (CC0) del proyecto de referencia y mantener el resto del trabajo.
+El kit no declara ninguna licencia, así que no se afirma aquí que estos GIFs estén bajo MIT,
+CC0 ni ninguna otra.
 
 ## Pendiente de verificación física
 

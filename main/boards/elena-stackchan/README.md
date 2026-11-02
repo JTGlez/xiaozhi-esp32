@@ -19,7 +19,7 @@ retain their owners. One GIF decoder is used at a time; unavailable resources
 fall back once to neutral, then to the static RGB565 image in application flash.
 The generated header includes expected GIF sizes and CRCs, so damaged payloads
 never enter the decoder's unbounded raw-memory API. Resources, integrity data
-and aliases are build dependencies. Artwork provenance is in `assets/PROVENANCE.md`.
+and aliases are build dependencies. The artwork was generated with AI (ChatGPT); its provenance is in `assets/PROVENANCE.md`.
 
 Events are optional through `Display`; other boards retain their interface
 behavior. The controller resolves activity on the main task; graphics and
