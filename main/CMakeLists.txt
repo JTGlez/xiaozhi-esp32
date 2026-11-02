@@ -1189,6 +1189,11 @@ if(NOT CMAKE_BUILD_EARLY_EXPANSION)
     endif()
 endif()
 
+# Rewritten only when the language changes, so the header below is rebuilt then:
+# the new language's JSON is usually older than the header it must replace.
+set(LANG_STAMP "${CMAKE_CURRENT_BINARY_DIR}/lang_dir.stamp")
+file(CONFIGURE OUTPUT "${LANG_STAMP}" CONTENT "${LANG_DIR}\n" @ONLY)
+
 # Add generation rules
 add_custom_command(
     OUTPUT ${LANG_HEADER}
@@ -1197,6 +1202,7 @@ add_custom_command(
             --output "${LANG_HEADER}"
     DEPENDS
         ${LANG_JSON}
+        ${LANG_STAMP}
         ${PROJECT_DIR}/scripts/gen_lang.py
     COMMENT "Generating ${LANG_DIR} language config"
 )
