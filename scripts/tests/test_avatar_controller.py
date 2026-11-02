@@ -24,6 +24,12 @@ CASES = (
     "test_notice_survives_emotion",
     "test_all_aliases_and_invalid_names",
     "test_priority_and_no_deadline_resets",
+    "test_mood_survives_long_reply",
+    "test_stop_without_idle_keeps_speaking",
+    "test_notification_drained_before_finished",
+    "test_stop_drain_finish_permutations",
+    "test_notification_playback_id_checks",
+    "test_cancellation_clears_emotion",
 )
 
 

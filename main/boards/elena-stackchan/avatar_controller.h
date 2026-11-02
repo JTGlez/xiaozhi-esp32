@@ -7,7 +7,8 @@
 #include "conversation_visual.h"
 
 // Visual recovery windows. They never cancel a network request, audio playback
-// or queue drain.
+// or queue drain. The mood window pauses while a thinking wait or a speaking
+// cycle owns the avatar, so it always lasts 5 s after the last cycle ends.
 inline constexpr uint64_t kAvatarMoodRestMs = 5000;
 inline constexpr uint64_t kAvatarWaitTimeoutMs = 30000;
 inline constexpr uint64_t kAvatarAudioIdleTimeoutMs = 30000;
@@ -50,6 +51,8 @@ private:
     bool IsSpeaking(uint64_t now_ms) const;
     bool IsThinking(uint64_t now_ms) const;
     bool IsMoodActive(uint64_t now_ms) const;
+    uint64_t CycleEndMs(uint64_t now_ms) const;
+    void RearmMood(uint64_t settled_ms);
     void EndSpeakingCycle(uint64_t now_ms, const char* reason);
     void CancelTurn(const char* reason);
     void Sweep(uint64_t now_ms);

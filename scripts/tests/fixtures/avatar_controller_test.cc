@@ -401,6 +401,276 @@ void TestPriorityAndNoDeadlineResets() {
     Expect("test_priority_and_no_deadline_resets", c.Resolve(30100), "listening", false, false);
 }
 
+void TestMoodSurvivesLongReply() {
+    // La ventana de reposo no corre mientras un ciclo visual posee el avatar:
+    // una emocion recibida al inicio de una respuesta de mas de 5 s debe durar
+    // 5 s despues de que la respuesta termine.
+    AvatarController c;
+    c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    c.Handle(Ev(Kind::Emotion, 1, 1000, 0, true, Activity::Idle, "happy"));
+    c.Handle(Ev(Kind::TtsStarted, 1, 1100, 0, false));
+    c.Handle(Ev(Kind::PlaybackState, 1, 3000, 0, false));
+    c.Handle(Ev(Kind::AudioActivity, 1, 3000, 0, false));
+    c.Handle(Ev(Kind::AudioActivity, 1, 7000, 0, false));
+    ExpectResolvedEmotion("test_mood_survives_long_reply", c, 7500, "speaking");
+
+    // 6 s despues de la emocion, la respuesta sigue en curso.
+    c.Handle(Ev(Kind::TtsStopped, 1, 8000, 0, false));
+    ExpectResolvedEmotion("test_mood_survives_long_reply", c, 8500, "speaking");
+
+    c.Handle(Ev(Kind::PlaybackState, 1, 9000, 0, true));
+    ExpectResolvedEmotion("test_mood_survives_long_reply", c, 9000, "happy");
+    ExpectResolvedEmotion("test_mood_survives_long_reply", c, 10000, "happy");
+    ExpectResolvedEmotion("test_mood_survives_long_reply", c, 13999, "happy");
+    ExpectResolvedEmotion("test_mood_survives_long_reply", c, 14000, "neutral");
+    ExpectResolvedEmotion("test_mood_survives_long_reply", c, 20000, "neutral");
+
+    // La espera de respuesta tambien congela la ventana: la emocion reaparece
+    // cuando el avatar vuelve a estar ocioso.
+    AvatarController w;
+    w.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    w.Handle(Ev(Kind::FinalTranscript, 1, 1000, 0, true, Activity::Idle));
+    w.Handle(Ev(Kind::Emotion, 1, 1100, 0, true, Activity::Idle, "sad"));
+    ExpectResolvedEmotion("test_mood_survives_long_reply", w, 1200, "thinking");
+    ExpectResolvedEmotion("test_mood_survives_long_reply", w, 30999, "thinking");
+    ExpectResolvedEmotion("test_mood_survives_long_reply", w, 31000, "sad");
+    ExpectResolvedEmotion("test_mood_survives_long_reply", w, 35999, "sad");
+    ExpectResolvedEmotion("test_mood_survives_long_reply", w, 36000, "neutral");
+
+    // Un evento despues de la espera no revive una emocion ya vencida.
+    w.Handle(Ev(Kind::Tick, 1, 40000));
+    ExpectResolvedEmotion("test_mood_survives_long_reply", w, 40000, "neutral");
+}
+
+void TestStopWithoutIdleKeepsSpeaking() {
+    // tts.stop con audio pendiente, sin PlaybackState(false) previo: el estado
+    // del reproductor lo aporta el propio evento.
+    AvatarController c;
+    c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    c.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+    c.Handle(Ev(Kind::TtsStopped, 1, 200, 0, false));
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", c, 200, "speaking");
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", c, 10000, "speaking");
+    c.Handle(Ev(Kind::PlaybackState, 1, 11000, 0, true));
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", c, 11000, "neutral");
+
+    // Si nunca llega el drenado, la recuperacion visual cierra el ciclo sin
+    // cortar audio: 30 s desde la ultima senal aceptada (200 + 30000).
+    AvatarController r;
+    r.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    r.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+    r.Handle(Ev(Kind::TtsStopped, 1, 200, 0, false));
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", r, 30199, "speaking");
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", r, 30200, "neutral");
+
+    // Audio aceptado despues del stop extiende la ventana de recuperacion.
+    AvatarController a;
+    a.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    a.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+    a.Handle(Ev(Kind::TtsStopped, 1, 200, 0, false));
+    a.Handle(Ev(Kind::AudioActivity, 1, 20000, 0, false));
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", a, 30199, "speaking");
+    ExpectResolvedEmotion("test_stop_without_idle_keeps_speaking", a, 50200, "neutral");
+}
+
+void TestNotificationDrainedBeforeFinished() {
+    // Orden real de notify_player.cc: el reproductor queda idle antes de que
+    // se anuncie el fin de la notificacion.
+    AvatarController c;
+    c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Listening));
+    c.Handle(Ev(Kind::NotificationStarted, 1, 100, 7, false));
+    Expect("test_notification_drained_before_finished", c.Resolve(100), "speaking", false, false);
+
+    c.Handle(Ev(Kind::PlaybackState, 1, 200, 7, true));
+    Expect("test_notification_drained_before_finished", c.Resolve(200), "speaking", false, false);
+    c.Handle(Ev(Kind::NotificationFinished, 1, 300, 7, true));
+    Expect("test_notification_drained_before_finished", c.Resolve(300), "listening", false, false);
+
+    // El mismo ciclo con el orden inverso cierra igual.
+    AvatarController f;
+    f.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Listening));
+    f.Handle(Ev(Kind::NotificationStarted, 1, 100, 7, false));
+    f.Handle(Ev(Kind::NotificationFinished, 1, 200, 7, true));
+    Expect("test_notification_drained_before_finished", f.Resolve(200), "speaking", false, false);
+    f.Handle(Ev(Kind::PlaybackState, 1, 300, 7, true));
+    Expect("test_notification_drained_before_finished", f.Resolve(300), "listening", false, false);
+}
+
+void TestStopDrainFinishPermutations() {
+    const Activity idle = Activity::Idle;
+    const Activity listening = Activity::Listening;
+
+    // (1) stop con el reproductor ya idle: el ciclo termina al instante.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, idle));
+        c.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+        c.Handle(Ev(Kind::TtsStopped, 1, 200, 0, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 200, "neutral");
+    }
+
+    // (2) drenado, despues stop(idle=true).
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, idle));
+        c.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 200, 0, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 300, 0, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 300, "speaking");
+        c.Handle(Ev(Kind::TtsStopped, 1, 400, 0, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 400, "neutral");
+    }
+
+    // (3) drenado momentaneo, despues stop(idle=false): el stop anuncia audio
+    // pendiente, asi que el ciclo espera al siguiente drenado.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, idle));
+        c.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 200, 0, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 300, 0, true));
+        c.Handle(Ev(Kind::TtsStopped, 1, 400, 0, false));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 400, "speaking");
+        c.Handle(Ev(Kind::PlaybackState, 1, 500, 0, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 500, "neutral");
+    }
+
+    // (4) stop(idle=false), despues drenado.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, idle));
+        c.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 200, 0, false));
+        c.Handle(Ev(Kind::TtsStopped, 1, 300, 0, false));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 300, "speaking");
+        c.Handle(Ev(Kind::PlaybackState, 1, 400, 0, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 400, "neutral");
+    }
+
+    // (5) sin stop y sin drenado: solo la recuperacion de 30 s cierra el ciclo.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, idle));
+        c.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 30099, "speaking");
+        c.Handle(Ev(Kind::PlaybackState, 1, 30050, 0, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 30100, "neutral");
+    }
+
+    // (6) dos notificaciones seguidas con identificadores distintos.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, listening));
+        c.Handle(Ev(Kind::NotificationStarted, 1, 100, 3, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 200, 3, true));
+        c.Handle(Ev(Kind::NotificationFinished, 1, 300, 3, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 300, "listening");
+
+        c.Handle(Ev(Kind::NotificationStarted, 1, 400, 4, false));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 400, "speaking");
+        // Un cierre del identificador anterior ya no es vigente.
+        c.Handle(Ev(Kind::NotificationFinished, 1, 500, 3, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 500, "speaking");
+        c.Handle(Ev(Kind::PlaybackState, 1, 600, 4, true));
+        c.Handle(Ev(Kind::NotificationFinished, 1, 700, 4, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 700, "listening");
+    }
+
+    // (7) notificacion durante una respuesta: la notificacion manda y cierra su
+    // propio ciclo; el ciclo de TTS queda invalidado al terminar.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, listening));
+        c.Handle(Ev(Kind::TtsStarted, 1, 100, 0, false));
+        c.Handle(Ev(Kind::NotificationStarted, 1, 200, 9, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 300, 9, true));
+        c.Handle(Ev(Kind::NotificationFinished, 1, 400, 9, true));
+        ExpectResolvedEmotion("test_stop_drain_finish_permutations", c, 400, "listening");
+    }
+}
+
+void TestNotificationPlaybackIdChecks() {
+    const Activity listening = Activity::Listening;
+
+    // (a) NotificationFinished con identificador ajeno no cierra la vigente.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, listening));
+        c.Handle(Ev(Kind::NotificationStarted, 1, 100, 5, false));
+        c.Handle(Ev(Kind::NotificationFinished, 1, 200, 6, true));
+        Expect("test_notification_playback_id_checks", c.Resolve(200), "speaking", false, false);
+        c.Handle(Ev(Kind::PlaybackState, 1, 300, 5, true));
+        Expect("test_notification_playback_id_checks", c.Resolve(300), "speaking", false, false);
+        c.Handle(Ev(Kind::NotificationFinished, 1, 400, 5, true));
+        Expect("test_notification_playback_id_checks", c.Resolve(400), "listening", false, false);
+    }
+
+    // (b) Un drenado con identificador ajeno no drena la notificacion vigente.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, listening));
+        c.Handle(Ev(Kind::NotificationStarted, 1, 100, 5, false));
+        c.Handle(Ev(Kind::NotificationFinished, 1, 200, 5, true));
+        Expect("test_notification_playback_id_checks", c.Resolve(200), "speaking", false, false);
+        c.Handle(Ev(Kind::PlaybackState, 1, 300, 6, true));
+        Expect("test_notification_playback_id_checks", c.Resolve(300), "speaking", false, false);
+        c.Handle(Ev(Kind::PlaybackState, 1, 400, 5, true));
+        Expect("test_notification_playback_id_checks", c.Resolve(400), "listening", false, false);
+    }
+
+    // (c) Un drenado valido pero sin cierre no cierra el ciclo.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, listening));
+        c.Handle(Ev(Kind::NotificationStarted, 1, 100, 5, false));
+        c.Handle(Ev(Kind::PlaybackState, 1, 200, 5, true));
+        Expect("test_notification_playback_id_checks", c.Resolve(200), "speaking", false, false);
+        c.Handle(Ev(Kind::PlaybackState, 1, 300, 5, true));
+        Expect("test_notification_playback_id_checks", c.Resolve(300), "speaking", false, false);
+    }
+
+    // (d) Sin drenado ni cierre: recuperacion acotada a 30 s desde la senal de
+    // audio (1000 + 30000), nunca antes.
+    {
+        AvatarController c;
+        c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, listening));
+        c.Handle(Ev(Kind::NotificationStarted, 1, 1000, 11, false));
+        Expect("test_notification_playback_id_checks", c.Resolve(30999), "speaking", false, false);
+        Expect("test_notification_playback_id_checks", c.Resolve(31000), "listening", false, false);
+    }
+}
+
+void TestCancellationClearsEmotion() {
+    AvatarController c;
+    c.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    c.Handle(Ev(Kind::Emotion, 1, 100, 0, true, Activity::Idle, "pet"));
+    ExpectResolvedEmotion("test_cancellation_clears_emotion", c, 200, "pet");
+
+    c.Handle(Ev(Kind::Cancelled, 1, 300, 0, true, Activity::Idle));
+    ExpectResolvedEmotion("test_cancellation_clears_emotion", c, 300, "neutral");
+    ExpectResolvedEmotion("test_cancellation_clears_emotion", c, 4000, "neutral");
+    c.Handle(Ev(Kind::TurnStarted, 2, 5000, 0, true, Activity::Idle));
+    ExpectResolvedEmotion("test_cancellation_clears_emotion", c, 5100, "neutral");
+
+    // Cancelar durante speaking tampoco deja la emocion.
+    AvatarController s;
+    s.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    s.Handle(Ev(Kind::Emotion, 1, 100, 0, true, Activity::Idle, "happy"));
+    s.Handle(Ev(Kind::TtsStarted, 1, 200, 0, false));
+    ExpectResolvedEmotion("test_cancellation_clears_emotion", s, 300, "speaking");
+    s.Handle(Ev(Kind::Cancelled, 1, 400, 0, true, Activity::Idle));
+    ExpectResolvedEmotion("test_cancellation_clears_emotion", s, 400, "neutral");
+    ExpectResolvedEmotion("test_cancellation_clears_emotion", s, 4000, "neutral");
+
+    // Contraste: el cierre normal de un ciclo SI conserva la emocion.
+    AvatarController d;
+    d.Handle(Ev(Kind::TurnStarted, 1, 0, 0, false, Activity::Idle));
+    d.Handle(Ev(Kind::Emotion, 1, 100, 0, true, Activity::Idle, "sad"));
+    d.Handle(Ev(Kind::TtsStarted, 1, 200, 0, false));
+    d.Handle(Ev(Kind::TtsStopped, 1, 300, 0, true));
+    ExpectResolvedEmotion("test_cancellation_clears_emotion", d, 300, "sad");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -417,6 +687,12 @@ int main(int argc, char** argv) {
         {"test_notice_survives_emotion", TestNoticeSurvivesEmotion},
         {"test_all_aliases_and_invalid_names", TestAllAliasesAndInvalidNames},
         {"test_priority_and_no_deadline_resets", TestPriorityAndNoDeadlineResets},
+        {"test_mood_survives_long_reply", TestMoodSurvivesLongReply},
+        {"test_stop_without_idle_keeps_speaking", TestStopWithoutIdleKeepsSpeaking},
+        {"test_notification_drained_before_finished", TestNotificationDrainedBeforeFinished},
+        {"test_stop_drain_finish_permutations", TestStopDrainFinishPermutations},
+        {"test_notification_playback_id_checks", TestNotificationPlaybackIdChecks},
+        {"test_cancellation_clears_emotion", TestCancellationClearsEmotion},
     };
 
     if (argc < 2) {
