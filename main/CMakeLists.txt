@@ -232,9 +232,14 @@ elseif(CONFIG_BOARD_TYPE_M5STACK_CORE_P4)
 elseif(CONFIG_BOARD_TYPE_ELENA_STACKCHAN)
     set(BOARD_DIR "elena-stackchan")
     set(BUILTIN_TEXT_FONT font_noto_sans_basic_20_4)
-    set(BUILTIN_ICON_FONT font_material_symbols_16_4)
-    set(DEFAULT_EMOJI_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/gifs")
-    set(DEFAULT_EMOJI_ALIASES "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/aliases.json")
+    if(CONFIG_ELENA_AVATAR_EMOJI)
+        set(BUILTIN_ICON_FONT font_material_symbols_20_4)
+        set(DEFAULT_EMOJI_COLLECTION noto-color-emoji_64)
+    else()
+        set(BUILTIN_ICON_FONT font_material_symbols_16_4)
+        set(DEFAULT_EMOJI_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/gifs")
+        set(DEFAULT_EMOJI_ALIASES "${CMAKE_CURRENT_SOURCE_DIR}/boards/elena-stackchan/assets/aliases.json")
+    endif()
     list(APPEND SOURCES "boards/m5stack/core-s3/cores3_audio_codec.cc")
 elseif(CONFIG_BOARD_TYPE_M5STACK_CORE_S3)
     set(BOARD_DIR "m5stack/core-s3")
@@ -913,6 +918,9 @@ file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.c
 )
+if(CONFIG_ELENA_AVATAR_EMOJI)
+    list(FILTER BOARD_SOURCES EXCLUDE REGEX "/(elena_avatar_display|avatar_controller)\\.cc$")
+endif()
 list(APPEND SOURCES ${BOARD_SOURCES})
 
 # Select one audio engine for each chip family
@@ -1096,7 +1104,7 @@ if(CONFIG_BOARD_TYPE_ESP32_P4_FUNCTION_EV_BOARD)
         sdmmc
     )
 endif()
-if(CONFIG_BOARD_TYPE_ELENA_STACKCHAN)
+if(CONFIG_ELENA_AVATAR_ELENA)
     set(ELENA_FALLBACK_HEADER "${CMAKE_CURRENT_BINARY_DIR}/elena_avatar_fallback.h")
     file(GLOB ELENA_HEADER_GIFS CONFIGURE_DEPENDS "${DEFAULT_EMOJI_DIRECTORY}/*.gif")
     add_custom_command(OUTPUT "${ELENA_FALLBACK_HEADER}"

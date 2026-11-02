@@ -3,7 +3,12 @@
 #include "application.h"
 #include "axp2101.h"
 #include "config.h"
+#include "sdkconfig.h"
+#if CONFIG_ELENA_AVATAR_ELENA
 #include "elena_avatar_display.h"
+#else
+#include "lcd_display.h"
+#endif
 #include "i2c_device.h"
 #include "power_save_timer.h"
 #include "screen_stream.h"
@@ -372,9 +377,15 @@ private:
         esp_lcd_panel_swap_xy(panel, DISPLAY_SWAP_XY);
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
+#if CONFIG_ELENA_AVATAR_ELENA
         display_ = new ElenaAvatarDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                           DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                           DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+#else
+        display_ = new SpiLcdDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
+                                     DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
+                                     DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+#endif
         StartScreenStream();
     }
 

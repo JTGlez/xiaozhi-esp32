@@ -660,6 +660,18 @@ config ELENA_SCREEN_STREAM
         Lets a viewer on the OTA server's host request the screen over UDP.
         It costs almost nothing until a viewer connects. Experimental.
 
+choice ELENA_AVATAR
+    prompt "Elena StackChan avatar"
+    default ELENA_AVATAR_ELENA
+    depends on BOARD_TYPE_ELENA_STACKCHAN
+
+    config ELENA_AVATAR_ELENA
+        bool "Elena's animated avatar"
+
+    config ELENA_AVATAR_EMOJI
+        bool "Xiaozhi's emoji face"
+endchoice
+
 menu "Ethernet Configuration"
     depends on XIAOZHI_NETWORK_ETHERNET
 
