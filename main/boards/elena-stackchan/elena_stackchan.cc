@@ -6,6 +6,7 @@
 #include "elena_avatar_display.h"
 #include "i2c_device.h"
 #include "power_save_timer.h"
+#include "screen_stream.h"
 #include "wifi_board.h"
 
 #include <driver/i2c_master.h>
@@ -374,6 +375,7 @@ private:
         display_ = new ElenaAvatarDisplay(panel_io, panel, DISPLAY_WIDTH, DISPLAY_HEIGHT,
                                           DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X,
                                           DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
+        StartScreenStream();
     }
 
     void InitializeCamera() {

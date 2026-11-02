@@ -652,6 +652,14 @@ choice XIAOZHI_NETWORK_TYPE
             Use the onboard Ethernet port for network access.
 endchoice
 
+config ELENA_SCREEN_STREAM
+    bool "Stream Elena's screen to the PC for debugging"
+    default n
+    depends on BOARD_TYPE_ELENA_STACKCHAN
+    help
+        Lets a viewer on the OTA server's host request the screen over UDP.
+        It costs almost nothing until a viewer connects. Experimental.
+
 menu "Ethernet Configuration"
     depends on XIAOZHI_NETWORK_ETHERNET
 
