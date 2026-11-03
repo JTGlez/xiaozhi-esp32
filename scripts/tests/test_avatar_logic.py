@@ -12,7 +12,8 @@ FIXTURE = ROOT / "scripts" / "tests" / "fixtures" / "avatar_logic_test.cc"
 BOARD = ROOT / "main" / "boards" / "elena-stackchan"
 PROTOCOLS = ROOT / "main" / "protocols"
 DISPLAY = ROOT / "main" / "display"
-SOURCES = (BOARD / "avatar_clock.cc", BOARD / "boot_view.cc", PROTOCOLS / "server_endpoint.cc")
+SOURCES = (BOARD / "avatar_clock.cc", BOARD / "boot_view.cc", PROTOCOLS / "server_endpoint.cc",
+           PROTOCOLS / "server_wait.cc")
 CASES = (
     "clock_hidden_at_1970",
     "clock_hidden_at_2024",
@@ -28,6 +29,14 @@ CASES = (
     "boot_views",
     "boot_countdown",
     "boot_copy_has_only_available_glyphs",
+    "wait_reachable_server_is_not_checked_again",
+    "wait_counts_down_between_probes",
+    "wait_lets_power_save_run_until_it_ends",
+    "wait_refreshes_settings_after_a_failure",
+    "wait_without_url_asks_for_settings",
+    "wait_without_url_keeps_retrying",
+    "wait_stops_when_settings_bring_mqtt",
+    "wait_skips_everything_with_mqtt",
 )
 
 

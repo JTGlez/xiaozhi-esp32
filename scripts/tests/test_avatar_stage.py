@@ -277,7 +277,11 @@ class AvatarStageHarnessTest(unittest.TestCase):
                      "user_agent_not_shown", "notice_during_boot_shows_note",
                      "error_alert_during_boot_uses_error_color", "notification_during_boot_hidden",
                      "preview_during_boot_ignored", "power_save_during_boot",
-                     "failed_lock_during_progress_does_nothing", "requires_server_at_boot"):
+                     "failed_lock_during_progress_does_nothing", "requires_server_at_boot",
+                     "error_during_boot_shows_after_ready",
+                     "error_in_a_notice_during_boot_shows_after_ready",
+                     "later_status_clears_a_boot_error",
+                     "ordinary_status_during_boot_is_not_kept"):
             with self.subTest(name=name):
                 self.run_case(name, self.contract_binary)
 

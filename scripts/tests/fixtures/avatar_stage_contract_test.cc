@@ -49,6 +49,8 @@ public:
     lv_obj_t* previewImage() { return preview_image_; }
     lv_obj_t* topBar() { return top_bar_; }
     lv_obj_t* tail(size_t index) { return tail_[index]; }
+    lv_obj_t* statusBubble() { return status_bubble_; }
+    lv_obj_t* statusLabel() { return status_label_; }
     BootScreen* boot() { return boot_screen(); }
 };
 
@@ -378,6 +380,47 @@ void failed_lock_during_progress_does_nothing() {
           "bubble changed without the lock");
 }
 
+void error_during_boot_shows_after_ready() {
+    auto display = booting_stage();
+    display->SetStatus(Lang::Strings::ERROR);
+    CHECK(std::strcmp(text_of(display->boot()->bubble_label()), "Conectando a Wi-Fi...") == 0,
+          "a status without a notice replaced the step");
+    display->OnBootProgress(BootStep::kReady, 0);
+    CHECK(!hidden(display->statusBubble()), "the error vanished at ready");
+    CHECK(std::strcmp(text_of(display->statusLabel()), "\xC3\x97 XZ_STR_ERROR") == 0, "no mark");
+    CHECK(host_lvgl_obj_bg_color(display->statusBubble()) == kAvatarErrorColor, "not red");
+    for (size_t i = 0; i < 4; ++i) {
+        CHECK(!hidden(display->tail(i)), "tail hidden");
+    }
+    display->SetStatus("OK");
+    CHECK(host_lvgl_obj_bg_color(display->statusBubble()) == AVATAR_ACCENT_COLOR, "stayed red");
+}
+
+void error_in_a_notice_during_boot_shows_after_ready() {
+    auto display = booting_stage();
+    display->OnConversationVisualEvent(event_of(ConversationVisualEventKind::NoticeStarted, 1000));
+    display->SetStatus(Lang::Strings::ERROR);
+    display->OnConversationVisualEvent(event_of(ConversationVisualEventKind::NoticeCleared, 1100));
+    display->OnBootProgress(BootStep::kReady, 0);
+    CHECK(!hidden(display->statusBubble()), "the error vanished at ready");
+}
+
+void later_status_clears_a_boot_error() {
+    auto display = booting_stage();
+    display->SetStatus(Lang::Strings::ERROR);
+    display->SetStatus("LOADING");
+    display->OnBootProgress(BootStep::kReady, 0);
+    CHECK(hidden(display->statusBubble()), "an error that passed stayed");
+    CHECK(!tree_has("XZ_STR_ERROR"), "an error that passed stayed");
+}
+
+void ordinary_status_during_boot_is_not_kept() {
+    auto display = booting_stage();
+    display->SetStatus("LOADING");
+    display->OnBootProgress(BootStep::kReady, 0);
+    CHECK(hidden(display->statusBubble()), "a routine boot status reached the bubble");
+}
+
 void requires_server_at_boot() {
     auto display = booting_stage();
     CHECK(display->RequiresServerAtBoot(), "the stage must wait for the server");
@@ -411,6 +454,10 @@ const std::map<std::string, std::function<void()>>& cases() {
         CASE(power_save_during_boot),
         CASE(failed_lock_during_progress_does_nothing),
         CASE(requires_server_at_boot),
+        CASE(error_during_boot_shows_after_ready),
+        CASE(error_in_a_notice_during_boot_shows_after_ready),
+        CASE(later_status_clears_a_boot_error),
+        CASE(ordinary_status_during_boot_is_not_kept),
 #undef CASE
     };
     return all;

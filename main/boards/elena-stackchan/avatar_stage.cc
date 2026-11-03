@@ -150,6 +150,9 @@ void AvatarStage::OnBootProgress(BootStep step, int retry_seconds) {
     lv_obj_remove_flag(top_bar_, LV_OBJ_FLAG_HIDDEN);
     ready_ = true;
     ApplyPresentation(ResolveNow());
+    if (boot_error_pending_) {
+        SetStatus(Lang::Strings::ERROR);
+    }
 }
 
 void AvatarStage::CreateLayoutLocked() {
@@ -475,6 +478,7 @@ void AvatarStage::SetStatus(const char* status) {
     const bool is_error = std::strcmp(status, Lang::Strings::ERROR) == 0;
     std::string text = is_error ? std::string(kErrorMark) + status : std::string(status);
     if (!ready_) {
+        boot_error_pending_ = is_error;
         // Only a notice speaks over the current step; maintenance status must not.
         if (boot_ != nullptr && ResolveNow().notice_active) {
             boot_->ShowBubble(text.c_str(), is_error);

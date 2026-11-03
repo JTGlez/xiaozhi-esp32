@@ -2,6 +2,7 @@
 #include "avatar_clock.h"
 #include "boot_view.h"
 #include "server_endpoint.h"
+#include "server_wait.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -10,6 +11,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <vector>
 
 #define CHECK(cond)                                                                 \
     do {                                                                            \
@@ -110,6 +112,138 @@ void boot_copy_has_only_available_glyphs() {
     CHECK(copy.find("\xE2\x9C\x95") == std::string::npos);  // Multiplication X
 }
 
+// A scripted server: each probe answers from `probes`, and a settings check can
+// store a URL. `log` records the order of everything the wait does.
+struct FakeServer {
+    std::string url = "ws://192.0.2.1:8000/";
+    std::vector<bool> probes;
+    size_t next_probe = 0;
+    std::string url_after_check;
+    bool mqtt_after_check = false;
+    bool mqtt = false;
+    int checks = 0;
+    std::vector<int> countdown;
+    std::vector<std::string> log;
+
+    ServerWaitHooks hooks() {
+        ServerWaitHooks hooks;
+        hooks.still_required = [this]() { return !mqtt; };
+        hooks.stored_url = [this]() { return url; };
+        hooks.probe = [this](const ServerEndpoint& endpoint) {
+            log.push_back("probe " + endpoint.host);
+            CHECK(next_probe < probes.size());
+            return static_cast<bool>(probes[next_probe++]);
+        };
+        hooks.check_settings = [this]() {
+            log.push_back("check");
+            ++checks;
+            if (!url_after_check.empty()) {
+                url = url_after_check;
+            }
+            mqtt = mqtt_after_check;
+        };
+        hooks.set_waiting = [this](bool waiting) { log.push_back(waiting ? "wait on" : "wait off"); };
+        hooks.show_failure = [this](int seconds) { countdown.push_back(seconds); };
+        hooks.show_searching = [this]() { log.push_back("searching"); };
+        return hooks;
+    }
+    bool logged_before(const std::string& first, const std::string& second) const {
+        size_t a = log.size(), b = log.size();
+        for (size_t i = 0; i < log.size(); ++i) {
+            if (a == log.size() && log[i] == first) a = i;
+            if (log[i] == second) b = i;
+        }
+        return a < b && b < log.size();
+    }
+};
+
+void wait_reachable_server_is_not_checked_again() {
+    FakeServer server;
+    server.probes = {true};
+    WaitForServer(server.hooks());
+    CHECK(server.checks == 0);
+    CHECK(server.countdown.empty());
+    CHECK(server.next_probe == 1);
+}
+
+void wait_counts_down_between_probes() {
+    FakeServer server;
+    server.probes = {false, true};
+    WaitForServer(server.hooks());
+    CHECK((server.countdown == std::vector<int>{8, 7, 6, 5, 4, 3, 2, 1}));
+    CHECK(server.next_probe == 2);
+    CHECK(server.logged_before("wait on", "searching"));
+}
+
+void wait_lets_power_save_run_until_it_ends() {
+    FakeServer server;
+    server.probes = {false, false, true};
+    WaitForServer(server.hooks());
+    CHECK(server.log.back() != "wait on");
+    CHECK(server.logged_before("wait on", "wait off"));
+}
+
+void wait_refreshes_settings_after_a_failure() {
+    // The first attempt found no server, so nothing set the time or the config.
+    FakeServer server;
+    server.probes = {false, true};
+    WaitForServer(server.hooks());
+    CHECK(server.checks == 1);
+    CHECK(server.logged_before("wait off", "check"));
+}
+
+void wait_without_url_asks_for_settings() {
+    FakeServer server;
+    server.url = "";
+    server.probes = {true};
+    server.url_after_check = "ws://192.0.2.9:8000/";
+    WaitForServer(server.hooks());
+    CHECK(server.next_probe == 1);
+    CHECK(server.log[0] == "wait on");
+    // The answer that brought the URL also brought the rest.
+    CHECK(server.checks == 1);
+    CHECK(server.logged_before("check", "probe 192.0.2.9"));
+}
+
+void wait_without_url_keeps_retrying() {
+    FakeServer server;
+    server.url = "";
+    server.probes = {true};
+    int calls = 0;
+    auto hooks = server.hooks();
+    auto check = hooks.check_settings;
+    hooks.check_settings = [&]() {
+        check();
+        if (++calls == 3) {
+            server.url = "ws://192.0.2.9:8000/";
+        }
+    };
+    WaitForServer(hooks);
+    CHECK(calls == 3);
+    CHECK(server.countdown.size() == 24);
+    CHECK(server.next_probe == 1);
+}
+
+void wait_stops_when_settings_bring_mqtt() {
+    FakeServer server;
+    server.url = "";
+    server.mqtt_after_check = true;
+    WaitForServer(server.hooks());
+    CHECK(server.next_probe == 0);
+    CHECK(server.checks == 1);
+    CHECK(server.log.back() == "wait off");
+}
+
+void wait_skips_everything_with_mqtt() {
+    FakeServer server;
+    server.mqtt = true;
+    server.mqtt_after_check = true;
+    WaitForServer(server.hooks());
+    CHECK(server.next_probe == 0);
+    CHECK(server.checks == 0);
+    CHECK(server.countdown.empty());
+}
+
 const std::map<std::string, std::function<void()>>& cases() {
     static const std::map<std::string, std::function<void()>> all = {
 #define CASE(name) {#name, name}
@@ -127,6 +261,14 @@ const std::map<std::string, std::function<void()>>& cases() {
         CASE(boot_views),
         CASE(boot_countdown),
         CASE(boot_copy_has_only_available_glyphs),
+        CASE(wait_reachable_server_is_not_checked_again),
+        CASE(wait_counts_down_between_probes),
+        CASE(wait_lets_power_save_run_until_it_ends),
+        CASE(wait_refreshes_settings_after_a_failure),
+        CASE(wait_without_url_asks_for_settings),
+        CASE(wait_without_url_keeps_retrying),
+        CASE(wait_stops_when_settings_bring_mqtt),
+        CASE(wait_skips_everything_with_mqtt),
 #undef CASE
     };
     return all;

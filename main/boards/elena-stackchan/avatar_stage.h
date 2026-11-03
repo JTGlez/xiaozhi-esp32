@@ -80,6 +80,8 @@ private:
 
     std::unique_ptr<BootScreen> boot_;
     bool ready_ = false;
+    // An error from boot, shown once the bubble exists. A later status clears it.
+    bool boot_error_pending_ = false;
     std::unique_ptr<AvatarRenderer> renderer_;
     // What the renderer last received. Present runs only when this changes.
     AvatarPresentation presented_;

@@ -9,6 +9,7 @@
 #include "mqtt_protocol.h"
 #include "server_endpoint.h"
 #include "server_probe.h"
+#include "server_wait.h"
 #include "settings.h"
 #include "system_info.h"
 #include "text_glyph_payload.h"
@@ -387,12 +388,20 @@ void Application::HandleActivationDoneEvent() {
     ESP_LOGI(TAG, "Activation done");
 
     SystemInfo::PrintHeapStats();
+    const bool already_idle = GetDeviceState() == kDeviceStateIdle;
     SetDeviceState(kDeviceStateIdle);
     auto boot_display = Board::GetInstance().GetDisplay();
     boot_display->OnBootProgress(BootStep::kReady, 0);
     if (boot_display->RequiresServerAtBoot()) {
         // Brings the screen back if the boot wait dimmed it. LOW_POWER follows below.
         Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
+        if (already_idle) {
+            // A touch during the wait already moved the state, so the line above changed
+            // nothing. The idle handler must run again: it sets the status the boot screen
+            // dropped, and restores wake word detection, which a wake word stopped while
+            // there was no protocol to answer it.
+            xEventGroupSetBits(event_group_, MAIN_EVENT_STATE_CHANGED);
+        }
     }
 
     has_server_time_ = ota_->HasServerTime();
@@ -503,26 +512,33 @@ void Application::CheckAssetsVersion() {
 
 void Application::WaitForServerAtBoot() {
     auto display = Board::GetInstance().GetDisplay();
-    if (!display->RequiresServerAtBoot() || ota_->HasMqttConfig()) {
+    if (!display->RequiresServerAtBoot()) {
         return;
     }
-    while (true) {
+    ServerWaitHooks hooks;
+    hooks.still_required = [this]() { return !ota_->HasMqttConfig(); };
+    hooks.stored_url = []() {
         Settings settings("websocket", false);
-        auto endpoint = ParseWebsocketEndpoint(settings.GetString("url"));
-        if (endpoint && ProbeServer(*endpoint, 3000)) {
-            waiting_for_server_.store(false);
-            display->OnBootProgress(BootStep::kFindingServer, 0);
-            return;
+        return settings.GetString("url");
+    };
+    hooks.probe = [](const ServerEndpoint& endpoint) {
+        const bool reachable = ProbeServer(endpoint, 3000);
+        if (!reachable) {
+            ESP_LOGW(TAG, "Server not reachable, retrying");
         }
-        ESP_LOGW(TAG, "Server not reachable, retrying");
-        // Lets the power save timer run: in Activating, CanEnterSleepMode says no.
-        waiting_for_server_.store(true);
-        for (int seconds = 8; seconds > 0; --seconds) {
-            display->OnBootProgress(BootStep::kServerFailed, seconds);
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
+        return reachable;
+    };
+    hooks.check_settings = [this]() { CheckNewVersion(); };
+    // Lets the power save timer run: in Activating, CanEnterSleepMode says no.
+    hooks.set_waiting = [this](bool waiting) { waiting_for_server_.store(waiting); };
+    hooks.show_failure = [display](int seconds) {
+        display->OnBootProgress(BootStep::kServerFailed, seconds);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    };
+    hooks.show_searching = [display]() {
         display->OnBootProgress(BootStep::kFindingServer, 0);
-    }
+    };
+    WaitForServer(hooks);
 }
 
 void Application::CheckNewVersion() {
@@ -542,6 +558,11 @@ void Application::CheckNewVersion() {
                 ESP_LOGW(TAG, "Server settings unavailable, using the stored ones: %s",
                          check.error().ToString().c_str());
                 ota_->MarkCurrentVersionValid();
+                return;
+            }
+            if (display->RequiresServerAtBoot()) {
+                // Its wait retries, shows the failure and lets power save run.
+                ESP_LOGW(TAG, "No server settings yet: %s", check.error().ToString().c_str());
                 return;
             }
 
