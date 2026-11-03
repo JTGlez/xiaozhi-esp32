@@ -16,6 +16,7 @@ from pathlib import Path
 MANIFEST_NAME = "avatar.json"
 FALLBACK_SIZE = 320 * 240 * 2
 GIF_FOLDER_NAME = "gifs"
+BOOT_FILES = ("boot.png", "boot_image.c", "boot_name.c")
 MAX_DISPLAY_NAME = 20
 
 COLOR_FIELDS = ("background", "accent", "accent_text", "name_color", "icon_color")
@@ -116,6 +117,9 @@ def load_manifest(avatar_dir: Path) -> dict:
     renderer = _check_fields(manifest)
     _check_display_name(manifest["display_name"])
     _check_colors(manifest)
+    for name in BOOT_FILES:
+        if not (avatar_dir / name).is_file():
+            raise ManifestError(f"{name}: every avatar needs {avatar_dir / name}")
     if renderer == "gif":
         _check_gif_art(avatar_dir, manifest)
     elif renderer == "image":

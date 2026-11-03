@@ -277,6 +277,7 @@ void lv_obj_remove_flag(lv_obj_t* obj, uint32_t flag);
 bool lv_obj_has_flag(const lv_obj_t* obj, uint32_t flag);
 
 void lv_obj_set_style_text_font(lv_obj_t* obj, const lv_font_t* font, uint32_t part);
+const lv_font_t* lv_obj_get_style_text_font(const lv_obj_t* obj, uint32_t part);
 void lv_obj_set_style_text_color(lv_obj_t* obj, lv_color_t color, uint32_t part);
 void lv_obj_set_style_bg_color(lv_obj_t* obj, lv_color_t color, uint32_t part);
 void lv_obj_set_style_bg_opa(lv_obj_t* obj, lv_opa_t opa, uint32_t part);

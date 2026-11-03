@@ -1,6 +1,7 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
+#include "boot_step.h"
 #include "conversation_visual.h"
 #include "emoji_collection.h"
 #include "text_glyph.h"
@@ -58,6 +59,11 @@ public:
     virtual bool IsMonochrome() const { return false; }
     virtual bool SupportsGuiOperations() const { return false; }
     virtual bool SupportsConversationVisuals() const { return false; }
+    virtual void OnBootProgress(BootStep step, int retry_seconds) {
+        (void)step;
+        (void)retry_seconds;
+    }
+    virtual bool RequiresServerAtBoot() const { return false; }
     virtual void OnConversationVisualEvent(const ConversationVisualEvent& event) { (void)event; }
     virtual void SetHideSubtitle(bool hide) { (void)hide; }
     virtual bool InsertAnimDialog(const char* name, uint32_t duration_ms) {

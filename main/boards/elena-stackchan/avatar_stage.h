@@ -3,6 +3,7 @@
 
 #include "avatar_controller.h"
 #include "avatar_renderer.h"
+#include "boot_step.h"
 #include "lcd_display.h"
 
 #include <esp_timer.h>
@@ -12,6 +13,8 @@
 #include <memory>
 #include <mutex>
 
+class BootScreen;
+
 inline constexpr uint32_t kAvatarErrorColor = 0xC62828;
 inline constexpr int kAvatarBubbleMaxTextWidth = 176;
 
@@ -19,6 +22,9 @@ inline constexpr int kAvatarBubbleMaxTextWidth = 176;
 // status bubble, clock and icons, and a strip for operational notices. The avatar
 // itself is an AvatarRenderer drawing in a layer below all of that, so a new
 // avatar changes nothing here. Conversation text never reaches the screen.
+//
+// A boot screen covers all of that until Application reports kReady: only then
+// does the renderer exist, so the avatar does not load without its server.
 class AvatarStage : public SpiLcdDisplay, private AvatarArtSource {
 public:
     AvatarStage(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel, int width,
@@ -39,9 +45,12 @@ public:
     bool SupportsConversationVisuals() const override { return true; }
     void OnConversationVisualEvent(const ConversationVisualEvent& event) override;
     void SetPowerSaveMode(bool on) override;
+    void OnBootProgress(BootStep step, int retry_seconds) override;
+    bool RequiresServerAtBoot() const override { return true; }
 
 protected:
     AvatarRenderer* renderer() const { return renderer_.get(); }
+    BootScreen* boot_screen() const { return boot_.get(); }
 
     lv_obj_t* status_bubble_ = nullptr;
     lv_obj_t* clock_label_ = nullptr;
@@ -69,6 +78,8 @@ private:
     AvatarPresentation last_requested_;
     bool last_requested_valid_ = false;
 
+    std::unique_ptr<BootScreen> boot_;
+    bool ready_ = false;
     std::unique_ptr<AvatarRenderer> renderer_;
     // What the renderer last received. Present runs only when this changes.
     AvatarPresentation presented_;

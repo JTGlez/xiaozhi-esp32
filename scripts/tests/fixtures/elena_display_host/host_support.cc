@@ -4,6 +4,7 @@
 #include "application.h"
 #include "board.h"
 #include "cbin_font.h"
+#include "esp_app_desc.h"
 #include "esp_heap_caps.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
@@ -243,3 +244,8 @@ void host_app_set_device_state(DeviceState state) { app_state().state = state; }
 int host_app_play_sound_count(void) { return app_state().play_sound_count; }
 
 int AudioCodec::output_volume() { return 50; }
+
+const esp_app_desc_t* esp_app_get_description(void) {
+    static const esp_app_desc_t description = {"2.5.0"};
+    return &description;
+}

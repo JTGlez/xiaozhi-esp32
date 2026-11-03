@@ -1,7 +1,10 @@
 /* The real AvatarStage driving a fake renderer: the contract, without any art. */
 #include "avatar_stage.h"
 
+#include "avatar_pack_config.h"
+#include "boot_screen.h"
 #include "emoji_collection.h"
+#include "assets/lang_config.h"
 #include "esp_lvgl_port.h"
 #include "fake_avatar_factory.h"
 #include "lvgl.h"
@@ -28,6 +31,13 @@
         }                                                                                         \
     } while (0)
 
+extern "C" {
+extern const lv_image_dsc_t avatar_boot_image;
+extern const lv_image_dsc_t avatar_boot_name;
+const lv_image_dsc_t avatar_boot_image{};
+const lv_image_dsc_t avatar_boot_name{};
+}
+
 namespace {
 
 std::string g_dir;
@@ -37,6 +47,9 @@ public:
     using AvatarStage::AvatarStage;
     lv_obj_t* emojiBox() { return emoji_box_; }
     lv_obj_t* previewImage() { return preview_image_; }
+    lv_obj_t* topBar() { return top_bar_; }
+    lv_obj_t* tail(size_t index) { return tail_[index]; }
+    BootScreen* boot() { return boot_screen(); }
 };
 
 std::unique_ptr<StageHarness> make_display() {
@@ -74,14 +87,25 @@ ConversationVisualEvent event_of(ConversationVisualEventKind kind, uint64_t now)
     return event;
 }
 
-/* A stage that has finished its setup, with an empty log. */
-std::unique_ptr<StageHarness> ready_stage() {
+/* A stage still on its boot screen. */
+std::unique_ptr<StageHarness> booting_stage() {
     host_set_clock_ms(1000);
     auto display = make_display();
     theme_named("light")->set_emoji_collection(new_collection());
     display->SetupUI();
     return display;
 }
+
+/* A stage that has finished booting. */
+std::unique_ptr<StageHarness> ready_stage() {
+    auto display = booting_stage();
+    display->OnBootProgress(BootStep::kReady, 0);
+    return display;
+}
+
+bool hidden(lv_obj_t* obj) { return host_lvgl_obj_hidden(obj); }
+bool tree_has(const char* text) { return host_lvgl_tree_has_text(lv_screen_active(), text); }
+const char* text_of(lv_obj_t* obj) { return host_lvgl_obj_text(obj); }
 
 size_t presents() { return fake_renderer_log().presentations.size(); }
 const char* last_emotion() { return fake_renderer_log().presentations.back().emotion; }
@@ -179,6 +203,186 @@ void renderer_gets_no_text() {
     CHECK(presents() == before, "text reached the renderer");
 }
 
+void boot_shows_wifi_first() {
+    auto display = booting_stage();
+    CHECK(display->boot() != nullptr, "no boot screen");
+    CHECK(std::strcmp(text_of(display->boot()->bubble_label()), "Conectando a Wi-Fi...") == 0,
+          "wrong first step");
+    CHECK(std::strcmp(text_of(display->boot()->version()), "v2.5.0") == 0, "wrong version");
+    CHECK(hidden(display->boot()->countdown()), "countdown visible");
+    CHECK(hidden(display->boot()->note()), "note visible");
+    CHECK(host_lvgl_obj_img_src(display->boot()->image()) == &avatar_boot_image, "wrong image");
+    CHECK(host_lvgl_obj_img_src(display->boot()->name()) == &avatar_boot_name, "wrong name");
+    CHECK(host_lvgl_obj_bg_color(display->boot()->root()) == AVATAR_BACKGROUND_COLOR,
+          "wrong background");
+    CHECK(host_lvgl_obj_bg_opa(display->boot()->root()) == LV_OPA_COVER, "root not opaque");
+}
+
+void boot_hides_ui() {
+    auto display = booting_stage();
+    CHECK(hidden(display->topBar()), "top bar visible");
+    CHECK(hidden(display->emojiBox()), "layer visible");
+    for (size_t i = 0; i < 4; ++i) {
+        CHECK(hidden(display->tail(i)), "tail visible");
+    }
+}
+
+void no_attach_before_ready() {
+    auto display = booting_stage();
+    display->OnConversationVisualEvent(event_of(ConversationVisualEventKind::Tick, 1000));
+    display->SetEmotion("happy");
+    display->OnBootProgress(BootStep::kFindingServer, 0);
+    display->OnBootProgress(BootStep::kServerFailed, 8);
+    display->OnBootProgress(BootStep::kFindingServer, 0);
+    CHECK(fake_renderer_log().attach_count == 0, "attached before ready");
+    CHECK(presents() == 0, "presented before ready");
+}
+
+void boot_steps_update_the_bubble() {
+    auto display = booting_stage();
+    auto* boot = display->boot();
+    display->OnBootProgress(BootStep::kFindingServer, 0);
+    CHECK(std::strcmp(text_of(boot->bubble_label()), "Buscando al servidor...") == 0, "finding");
+    CHECK(host_lvgl_obj_bg_color(boot->bubble()) == AVATAR_ACCENT_COLOR, "finding color");
+    display->OnBootProgress(BootStep::kServerFailed, 8);
+    CHECK(std::strcmp(text_of(boot->bubble_label()), "\xC3\x97 No encuentro el servidor") == 0,
+          "failed");
+    CHECK(host_lvgl_obj_bg_color(boot->bubble()) == kAvatarErrorColor, "failure color");
+    CHECK(host_lvgl_obj_text_color(boot->bubble_label()) == 0xFFFFFF, "failure text color");
+    CHECK(std::strcmp(text_of(boot->countdown()), "Reintento en 8 s") == 0, "countdown");
+    CHECK(!hidden(boot->countdown()), "countdown hidden");
+    display->OnBootProgress(BootStep::kFindingServer, 0);
+    CHECK(std::strcmp(text_of(boot->bubble_label()), "Buscando al servidor...") == 0, "again");
+    CHECK(host_lvgl_obj_bg_color(boot->bubble()) == AVATAR_ACCENT_COLOR, "stayed red");
+    CHECK(host_lvgl_obj_text_color(boot->bubble_label()) == AVATAR_ACCENT_TEXT_COLOR,
+          "text stayed white");
+    CHECK(hidden(boot->countdown()), "countdown stayed");
+}
+
+void failure_then_ready_loads_avatar() {
+    auto display = booting_stage();
+    display->OnBootProgress(BootStep::kServerFailed, 8);
+    auto objects = host_lvgl_live_obj_count();
+    display->OnBootProgress(BootStep::kReady, 0);
+    CHECK(fake_renderer_log().attach_count == 1, "not attached");
+    CHECK(display->boot() == nullptr, "boot screen kept");
+    CHECK(host_lvgl_live_obj_count() < objects, "boot objects survived");
+    CHECK(!hidden(display->topBar()), "top bar hidden");
+    CHECK(!hidden(display->emojiBox()), "layer hidden");
+    CHECK(fake_renderer_log().layer == display->emojiBox(), "wrong layer");
+}
+
+void ready_applies_the_latest_presentation() {
+    auto display = booting_stage();
+    display->SetEmotion("happy");
+    CHECK(presents() == 0, "presented before ready");
+    display->OnBootProgress(BootStep::kReady, 0);
+    CHECK(presents() == 1, "ready did not present once");
+    CHECK(std::strcmp(fake_renderer_log().presentations[0].emotion, "happy") == 0, "wrong one");
+}
+
+void ready_twice_is_harmless() {
+    auto display = booting_stage();
+    display->OnBootProgress(BootStep::kReady, 0);
+    auto before = presents();
+    display->OnBootProgress(BootStep::kReady, 0);
+    CHECK(fake_renderer_log().attach_count == 1, "attached twice");
+    CHECK(presents() == before, "presented again");
+}
+
+void progress_after_ready_is_ignored() {
+    auto display = ready_stage();
+    auto objects = host_lvgl_live_obj_count();
+    display->OnBootProgress(BootStep::kServerFailed, 8);
+    display->OnBootProgress(BootStep::kFindingServer, 0);
+    CHECK(display->boot() == nullptr, "boot screen came back");
+    CHECK(host_lvgl_live_obj_count() == objects, "objects created after ready");
+    CHECK(!tree_has("No encuentro"), "failure shown after ready");
+}
+
+void user_agent_not_shown() {
+    auto display = booting_stage();
+    auto activity = event_of(ConversationVisualEventKind::Activity, 1000);
+    activity.activity = ConversationActivity::Maintenance;
+    display->OnConversationVisualEvent(activity);
+    display->SetChatMessage("system", "UA-STRING");
+    CHECK(!tree_has("UA-STRING"), "user agent on the boot screen");
+    display->SetStatus("MAINTENANCE-STATUS");
+    CHECK(!tree_has("MAINTENANCE-STATUS"), "maintenance replaced the step");
+    CHECK(std::strcmp(text_of(display->boot()->bubble_label()), "Conectando a Wi-Fi...") == 0,
+          "step lost");
+}
+
+void notice_during_boot_shows_note() {
+    auto display = booting_stage();
+    auto* boot = display->boot();
+    display->OnConversationVisualEvent(event_of(ConversationVisualEventKind::NoticeStarted, 1000));
+    display->SetStatus("ST");
+    display->SetChatMessage("system", "LONG-HINT");
+    CHECK(std::strcmp(text_of(boot->bubble_label()), "ST") == 0, "status not in the bubble");
+    CHECK(std::strcmp(text_of(boot->note()), "LONG-HINT") == 0, "hint not in the note");
+    CHECK(!hidden(boot->note()), "note hidden");
+    CHECK(hidden(boot->image()) && hidden(boot->name()), "art covers the note");
+    CHECK(host_lvgl_obj_y(boot->bubble()) == 8, "bubble not moved up");
+    display->OnConversationVisualEvent(event_of(ConversationVisualEventKind::NoticeCleared, 1100));
+    CHECK(hidden(boot->note()), "note stayed");
+    CHECK(!hidden(boot->image()) && !hidden(boot->name()), "art not restored");
+    CHECK(host_lvgl_obj_y(boot->bubble()) == 181, "bubble not restored");
+}
+
+void error_alert_during_boot_uses_error_color() {
+    auto display = booting_stage();
+    auto* boot = display->boot();
+    display->OnConversationVisualEvent(event_of(ConversationVisualEventKind::NoticeStarted, 1000));
+    display->SetStatus(Lang::Strings::ERROR);
+    CHECK(std::strcmp(text_of(boot->bubble_label()), "\xC3\x97 XZ_STR_ERROR") == 0, "no mark");
+    CHECK(host_lvgl_obj_bg_color(boot->bubble()) == kAvatarErrorColor, "not red");
+    CHECK(host_lvgl_obj_text_color(boot->bubble_label()) == 0xFFFFFF, "text not white");
+}
+
+void notification_during_boot_hidden() {
+    auto display = booting_stage();
+    display->ShowNotification("Conectado a MI-RED");
+    CHECK(!tree_has("MI-RED"), "the network's name reached the screen");
+    display->ShowNotification(std::string("Conectado a OTRA-RED"));
+    CHECK(!tree_has("OTRA-RED"), "the network's name reached the screen");
+}
+
+void preview_during_boot_ignored() {
+    auto display = booting_stage();
+    display->SetPreviewImage(make_preview_image());
+    CHECK(hidden(display->previewImage()), "preview shown during boot");
+    display->SetPreviewImage(nullptr);
+    CHECK(hidden(display->previewImage()), "preview shown during boot");
+}
+
+void power_save_during_boot() {
+    auto display = booting_stage();
+    display->SetPowerSaveMode(true);
+    CHECK(fake_renderer_log().power_save.empty(), "power save reached a renderer before ready");
+    display->OnBootProgress(BootStep::kReady, 0);
+    CHECK((fake_renderer_log().power_save == std::vector<bool>{true}), "power save not forwarded");
+    display->SetPowerSaveMode(false);
+    CHECK((fake_renderer_log().power_save == std::vector<bool>{true, false}), "not forwarded");
+}
+
+void failed_lock_during_progress_does_nothing() {
+    auto display = booting_stage();
+    host_lvgl_port_fail_next_locks(1000);
+    display->OnBootProgress(BootStep::kServerFailed, 8);
+    display->OnBootProgress(BootStep::kReady, 0);
+    host_lvgl_port_fail_next_locks(0);
+    CHECK(fake_renderer_log().attach_count == 0, "attached without the lock");
+    CHECK(display->boot() != nullptr, "boot screen deleted without the lock");
+    CHECK(std::strcmp(text_of(display->boot()->bubble_label()), "Conectando a Wi-Fi...") == 0,
+          "bubble changed without the lock");
+}
+
+void requires_server_at_boot() {
+    auto display = booting_stage();
+    CHECK(display->RequiresServerAtBoot(), "the stage must wait for the server");
+}
+
 const std::map<std::string, std::function<void()>>& cases() {
     static const std::map<std::string, std::function<void()>> all = {
 #define CASE(name) {#name, name}
@@ -191,6 +395,22 @@ const std::map<std::string, std::function<void()>>& cases() {
         CASE(power_save_forwarded),
         CASE(failed_lock_calls_nothing),
         CASE(renderer_gets_no_text),
+        CASE(boot_shows_wifi_first),
+        CASE(boot_hides_ui),
+        CASE(no_attach_before_ready),
+        CASE(boot_steps_update_the_bubble),
+        CASE(failure_then_ready_loads_avatar),
+        CASE(ready_applies_the_latest_presentation),
+        CASE(ready_twice_is_harmless),
+        CASE(progress_after_ready_is_ignored),
+        CASE(user_agent_not_shown),
+        CASE(notice_during_boot_shows_note),
+        CASE(error_alert_during_boot_uses_error_color),
+        CASE(notification_during_boot_hidden),
+        CASE(preview_during_boot_ignored),
+        CASE(power_save_during_boot),
+        CASE(failed_lock_during_progress_does_nothing),
+        CASE(requires_server_at_boot),
 #undef CASE
     };
     return all;

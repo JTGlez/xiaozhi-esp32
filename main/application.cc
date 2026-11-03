@@ -7,6 +7,8 @@
 #include "display.h"
 #include "mcp_server.h"
 #include "mqtt_protocol.h"
+#include "server_endpoint.h"
+#include "server_probe.h"
 #include "settings.h"
 #include "system_info.h"
 #include "text_glyph_payload.h"
@@ -386,6 +388,12 @@ void Application::HandleActivationDoneEvent() {
 
     SystemInfo::PrintHeapStats();
     SetDeviceState(kDeviceStateIdle);
+    auto boot_display = Board::GetInstance().GetDisplay();
+    boot_display->OnBootProgress(BootStep::kReady, 0);
+    if (boot_display->RequiresServerAtBoot()) {
+        // Brings the screen back if the boot wait dimmed it. LOW_POWER follows below.
+        Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
+    }
 
     has_server_time_ = ota_->HasServerTime();
 
@@ -414,6 +422,8 @@ void Application::HandleActivationDoneEvent() {
 }
 
 void Application::ActivationTask() {
+    Board::GetInstance().GetDisplay()->OnBootProgress(BootStep::kFindingServer, 0);
+
     // Create OTA object for activation process
     ota_ = std::make_unique<Ota>();
 
@@ -422,6 +432,7 @@ void Application::ActivationTask() {
 
     // Get the server's connection settings. This firmware never looks for updates.
     CheckNewVersion();
+    WaitForServerAtBoot();
 
     // Initialize the protocol
     InitializeProtocol();
@@ -488,6 +499,30 @@ void Application::CheckAssetsVersion() {
     assets.Apply();
     display->SetChatMessage("system", "");
     display->SetEmotion("robot_2");
+}
+
+void Application::WaitForServerAtBoot() {
+    auto display = Board::GetInstance().GetDisplay();
+    if (!display->RequiresServerAtBoot() || ota_->HasMqttConfig()) {
+        return;
+    }
+    while (true) {
+        Settings settings("websocket", false);
+        auto endpoint = ParseWebsocketEndpoint(settings.GetString("url"));
+        if (endpoint && ProbeServer(*endpoint, 3000)) {
+            waiting_for_server_.store(false);
+            display->OnBootProgress(BootStep::kFindingServer, 0);
+            return;
+        }
+        ESP_LOGW(TAG, "Server not reachable, retrying");
+        // Lets the power save timer run: in Activating, CanEnterSleepMode says no.
+        waiting_for_server_.store(true);
+        for (int seconds = 8; seconds > 0; --seconds) {
+            display->OnBootProgress(BootStep::kServerFailed, seconds);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+        display->OnBootProgress(BootStep::kFindingServer, 0);
+    }
 }
 
 void Application::CheckNewVersion() {
@@ -1449,7 +1484,7 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
 }
 
 bool Application::CanEnterSleepMode() {
-    if (GetDeviceState() != kDeviceStateIdle) {
+    if (GetDeviceState() != kDeviceStateIdle && !waiting_for_server_.load()) {
         return false;
     }
 

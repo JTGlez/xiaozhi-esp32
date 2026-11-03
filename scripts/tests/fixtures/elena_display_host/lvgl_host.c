@@ -144,7 +144,7 @@ struct _lv_obj_t {
 static lv_obj_t g_screen;
 static lv_display_t g_display;
 static bool g_display_valid = false;
-static size_t g_created_obj_count = 0;
+static size_t g_live_obj_count = 0;
 
 void host_lvgl_log_event(int kind, const void* obj, uintptr_t arg);
 void host_lvgl_log_event(int kind, const void* obj, uintptr_t arg) { log_event(kind, obj, arg); }
@@ -160,7 +160,7 @@ static lv_obj_t* new_obj(lv_obj_t* parent, const char* initial_text) {
     }
     if (initial_text != NULL)
         o->text = strdup(initial_text);
-    ++g_created_obj_count;
+    ++g_live_obj_count;
     log_event(HOST_LVGL_EV_CREATE, o, (uintptr_t)parent);
     return o;
 }
@@ -253,6 +253,7 @@ void lv_obj_del(lv_obj_t* obj) {
     free(obj->text);
     obj->magic = 0;
     free(obj);
+    --g_live_obj_count;
 }
 
 void lv_obj_clean(lv_obj_t* obj) {
@@ -731,6 +732,10 @@ lv_coord_t host_lvgl_obj_x(const lv_obj_t* obj) { return lv_obj_is_valid(obj) ? 
 lv_coord_t host_lvgl_obj_y(const lv_obj_t* obj) { return lv_obj_is_valid(obj) ? obj->y : 0; }
 lv_coord_t host_lvgl_obj_w(const lv_obj_t* obj) { return lv_obj_get_width(obj); }
 lv_coord_t host_lvgl_obj_h(const lv_obj_t* obj) { return lv_obj_get_height(obj); }
+const lv_font_t* lv_obj_get_style_text_font(const lv_obj_t* obj, uint32_t part) {
+    (void)part;
+    return lv_obj_is_valid(obj) ? obj->font : NULL;
+}
 uint32_t host_lvgl_obj_text_color(const lv_obj_t* obj) {
     return lv_obj_is_valid(obj) ? obj->text_color.val : 0;
 }
@@ -743,7 +748,7 @@ const lv_obj_t* host_lvgl_obj_parent(const lv_obj_t* obj) {
 const lv_font_t* host_lvgl_obj_font(const lv_obj_t* obj) {
     return lv_obj_is_valid(obj) ? obj->font : NULL;
 }
-size_t host_lvgl_live_obj_count(void) { return g_created_obj_count; }
+size_t host_lvgl_live_obj_count(void) { return g_live_obj_count; }
 
 bool host_lvgl_tree_has_text(const lv_obj_t* root, const char* needle) {
     if (!lv_obj_is_valid(root) || lv_obj_has_flag(root, LV_OBJ_FLAG_HIDDEN))

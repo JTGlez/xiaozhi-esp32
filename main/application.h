@@ -133,6 +133,9 @@ private:
     Application();
     ~Application();
 
+    std::atomic<bool> waiting_for_server_{false};
+    void WaitForServerAtBoot();
+
     std::mutex mutex_;
     std::deque<std::function<void()>> main_tasks_;
     std::unique_ptr<Protocol> protocol_;

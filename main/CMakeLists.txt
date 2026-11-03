@@ -33,6 +33,8 @@ set(SOURCES "audio/audio_codec.cc"
             "protocols/protocol.cc"
             "protocols/text_glyph_payload.cc"
             "protocols/mqtt_protocol.cc"
+            "protocols/server_endpoint.cc"
+            "protocols/server_probe.cc"
             "protocols/websocket_protocol.cc"
             "mcp_server.cc"
             "system_info.cc"
@@ -248,6 +250,7 @@ elseif(CONFIG_BOARD_TYPE_ELENA_STACKCHAN)
     endforeach()
     include("${CMAKE_CURRENT_BINARY_DIR}/avatar_pack.cmake")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${AVATAR_DIR}/avatar.json")
+    list(APPEND SOURCES "${AVATAR_DIR}/boot_image.c" "${AVATAR_DIR}/boot_name.c")
     list(APPEND SOURCES "boards/m5stack/core-s3/cores3_audio_codec.cc")
 elseif(CONFIG_BOARD_TYPE_M5STACK_CORE_S3)
     set(BOARD_DIR "m5stack/core-s3")

@@ -12,7 +12,7 @@ FIXTURE = ROOT / "scripts" / "tests" / "fixtures" / "avatar_logic_test.cc"
 BOARD = ROOT / "main" / "boards" / "elena-stackchan"
 PROTOCOLS = ROOT / "main" / "protocols"
 DISPLAY = ROOT / "main" / "display"
-SOURCES = (BOARD / "avatar_clock.cc",)
+SOURCES = (BOARD / "avatar_clock.cc", BOARD / "boot_view.cc", PROTOCOLS / "server_endpoint.cc")
 CASES = (
     "clock_hidden_at_1970",
     "clock_hidden_at_2024",
@@ -21,6 +21,13 @@ CASES = (
     "bubble_width_keeps_short_text",
     "bubble_width_caps_long_text",
     "bubble_width_never_zero",
+    "parse_ws_with_port",
+    "parse_defaults",
+    "parse_limits",
+    "parse_rejects",
+    "boot_views",
+    "boot_countdown",
+    "boot_copy_has_only_available_glyphs",
 )
 
 

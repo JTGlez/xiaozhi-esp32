@@ -2,9 +2,11 @@
 
 #include "avatar_clock.h"
 #include "avatar_pack_config.h"
+#include "boot_screen.h"
 #include "lvgl_display/lvgl_theme.h"
 
 #include <assets/lang_config.h>
+#include <esp_app_desc.h>
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <material_symbols.h>
@@ -15,6 +17,10 @@
 #include <string>
 
 static const char* TAG = "AvatarStage";
+
+// Each avatar's folder compiles these from its boot_image.c and boot_name.c.
+extern "C" const lv_image_dsc_t avatar_boot_image;
+extern "C" const lv_image_dsc_t avatar_boot_name;
 
 namespace {
 constexpr int kTopBarHeight = 30;
@@ -114,9 +120,35 @@ void AvatarStage::SetupUI() {
             return;
         }
         CreateLayoutLocked();
-        renderer_ = CreateAvatarRenderer(*this);
-        renderer_->Attach(emoji_box_);
+        lv_obj_add_flag(top_bar_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+        boot_ = std::make_unique<BootScreen>(lv_screen_active(), &avatar_boot_image,
+                                             &avatar_boot_name, esp_app_get_description()->version);
     }
+    ApplyPresentation(ResolveNow());
+}
+
+void AvatarStage::OnBootProgress(BootStep step, int retry_seconds) {
+    DisplayLockGuard lock(this);
+    if (!lock || ready_ || boot_ == nullptr) {
+        return;
+    }
+    if (step != BootStep::kReady) {
+        boot_->Show(ResolveBootView(step, retry_seconds));
+        if (step == BootStep::kServerFailed) {
+            boot_->SetNote("");
+        }
+        return;
+    }
+    renderer_ = CreateAvatarRenderer(*this);
+    renderer_->Attach(emoji_box_);
+    if (power_save_) {
+        renderer_->SetPowerSave(true);
+    }
+    boot_.reset();
+    lv_obj_remove_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(top_bar_, LV_OBJ_FLAG_HIDDEN);
+    ready_ = true;
     ApplyPresentation(ResolveNow());
 }
 
@@ -303,6 +335,12 @@ void AvatarStage::ApplyPresentation(const AvatarPresentation& presentation) {
         last_requested_ = presentation;
         last_requested_valid_ = true;
     }
+    if (!ready_) {
+        if (boot_ != nullptr && !presentation.notice_active) {
+            boot_->SetNote("");
+        }
+        return;
+    }
     bool operational_owner = presentation.notice_active || presentation.maintenance;
 
     if (preview_open_) {
@@ -434,8 +472,16 @@ void AvatarStage::SetStatus(const char* status) {
         return;
     }
     // State text only ("listening", "error"): the conversation never comes this way.
-    bubble_is_error_ = std::strcmp(status, Lang::Strings::ERROR) == 0;
-    std::string text = bubble_is_error_ ? std::string(kErrorMark) + status : std::string(status);
+    const bool is_error = std::strcmp(status, Lang::Strings::ERROR) == 0;
+    std::string text = is_error ? std::string(kErrorMark) + status : std::string(status);
+    if (!ready_) {
+        // Only a notice speaks over the current step; maintenance status must not.
+        if (boot_ != nullptr && ResolveNow().notice_active) {
+            boot_->ShowBubble(text.c_str(), is_error);
+        }
+        return;
+    }
+    bubble_is_error_ = is_error;
     lv_point_t size;
     lv_text_get_size(&size, text.c_str(), static_cast<LvglTheme*>(current_theme_)->text_font()->font(),
                      0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
@@ -464,6 +510,15 @@ void AvatarStage::SetChatMessage(const char* role, const char* content) {
     if (!lock)
         return;
     AvatarPresentation presentation = ResolveNow();
+    if (!ready_) {
+        // A setup hint belongs on the boot screen. Anything else, such as the
+        // user-agent line, does not show.
+        if (boot_ != nullptr && presentation.notice_active && role != nullptr &&
+            std::strcmp(role, "system") == 0 && content != nullptr) {
+            boot_->SetNote(content);
+        }
+        return;
+    }
     bool owner = presentation.notice_active || presentation.maintenance;
     if (owner && role != nullptr && std::strcmp(role, "system") == 0 && content != nullptr &&
         content[0] != '\0') {
@@ -525,6 +580,10 @@ void AvatarStage::ShowNotification(const char* notification, int duration_ms) {
     if (!setup_ui_called_ || notification == nullptr) {
         return;
     }
+    if (!ready_) {
+        // The bubble has the step, and a network's name must not appear here.
+        return;
+    }
     AvatarPresentation presentation = ResolveNow();
     if ((presentation.notice_active || presentation.maintenance) && notice_text_present_) {
         ESP_LOGI(TAG, "Operational notice keeps priority over notifications");
@@ -574,6 +633,10 @@ void AvatarStage::SetPreviewImage(std::unique_ptr<LvglImage> image) {
         return;
     }
     if (image != nullptr) {
+        if (!ready_) {
+            ESP_LOGW(TAG, "Preview ignored during boot");
+            return;
+        }
         AvatarPresentation presentation = ResolveNow();
         if ((presentation.notice_active || presentation.maintenance) && operational_text_active_) {
             ESP_LOGI(TAG, "Preview blocked by an active operational notice");

@@ -262,6 +262,21 @@ class ArtRuleTests(AvatarTestCase):
         self.assertIn(self.dir.resolve().as_posix(), render_cmake(manifest, self.dir))
 
 
+class BootFileTests(AvatarTestCase):
+    def test_missing_boot_files_stop(self):
+        makers = (make_gif_avatar, make_image_avatar, make_custom_avatar)
+        for make in makers:
+            for name in ("boot.png", "boot_image.c", "boot_name.c"):
+                with self.subTest(make=make.__name__, name=name), \
+                        tempfile.TemporaryDirectory() as temp:
+                    folder = Path(temp)
+                    make(folder)
+                    (folder / name).unlink()
+                    with self.assertRaises(ManifestError) as stopped:
+                        load_manifest(folder)
+                    self.assertIn(name, str(stopped.exception))
+
+
 class CommandLineTests(AvatarTestCase):
     def run_cli(self, command, out):
         return subprocess.run(

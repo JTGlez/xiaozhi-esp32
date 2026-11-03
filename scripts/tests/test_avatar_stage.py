@@ -50,6 +50,8 @@ SHARED_CPP = (
     HOST / "host_support.cc",
     BOARD / "avatar_stage.cc",
     BOARD / "avatar_clock.cc",
+    BOARD / "boot_view.cc",
+    BOARD / "boot_screen.cc",
     BOARD / "avatar_controller.cc",
     DISPLAY / "display.cc",
     DISPLAY / "lcd_display.cc",
@@ -73,6 +75,8 @@ CONTRACT_CPP = (
 PRODUCTION_CPP = (
     BOARD / "avatar_stage.cc",
     BOARD / "avatar_clock.cc",
+    BOARD / "boot_view.cc",
+    BOARD / "boot_screen.cc",
     BOARD / "gif_avatar_renderer.cc",
     BOARD / "gif_avatar_factory.cc",
     BOARD / "avatar_controller.cc",
@@ -245,6 +249,7 @@ class AvatarStageHarnessTest(unittest.TestCase):
         self.run_case("unchanged_tick_skips_display_lock")
         self.run_case("destruction_with_pending_timers")
         self.run_case("layout_positions")
+        self.run_case("real_gif_after_ready")
 
     def test_status_bubble(self):
         """Mutation targets: showing an empty bubble, letting long text move the
@@ -265,7 +270,14 @@ class AvatarStageHarnessTest(unittest.TestCase):
         for name in ("attach_once", "present_only_on_changes", "present_on_notice_flag_change",
                      "theme_reload_presents_again", "same_collection_theme_change_may_present_once",
                      "preview_blocks_present", "power_save_forwarded", "failed_lock_calls_nothing",
-                     "renderer_gets_no_text"):
+                     "renderer_gets_no_text", "boot_shows_wifi_first", "boot_hides_ui",
+                     "no_attach_before_ready", "boot_steps_update_the_bubble",
+                     "failure_then_ready_loads_avatar", "ready_applies_the_latest_presentation",
+                     "ready_twice_is_harmless", "progress_after_ready_is_ignored",
+                     "user_agent_not_shown", "notice_during_boot_shows_note",
+                     "error_alert_during_boot_uses_error_color", "notification_during_boot_hidden",
+                     "preview_during_boot_ignored", "power_save_during_boot",
+                     "failed_lock_during_progress_does_nothing", "requires_server_at_boot"):
             with self.subTest(name=name):
                 self.run_case(name, self.contract_binary)
 

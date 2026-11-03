@@ -45,6 +45,14 @@
         }                                                                                         \
     } while (0)
 
+/* The boot image and name of the build; their pixels are not read here. */
+extern "C" {
+extern const lv_image_dsc_t avatar_boot_image;
+extern const lv_image_dsc_t avatar_boot_name;
+const lv_image_dsc_t avatar_boot_image{};
+const lv_image_dsc_t avatar_boot_name{};
+}
+
 namespace {
 
 /* ------------------------------------------------------------- utilities */
@@ -165,6 +173,12 @@ public:
     }
 };
 
+template <typename Display>
+void setup_and_finish_boot(Display& display) {
+    display->SetupUI();
+    display->OnBootProgress(BootStep::kReady, 0);
+}
+
 std::unique_ptr<StageHarness> make_display() {
     static int io_stub = 0x10;
     static int panel_stub = 0x20;
@@ -211,7 +225,7 @@ int case_hidden_conversation(const std::string& dir) {
     auto collection = make_collection(dir, all_emotions());
     attach_theme(collection, "light");
     attach_theme(collection, "dark");
-    display->SetupUI();
+    setup_and_finish_boot(display);
 
     CHECK(display->bottomBar() == nullptr, "Elena must never create a bottom bar");
     CHECK(display->chatLabel() == nullptr, "Elena must never create a chat label");
@@ -281,7 +295,17 @@ int case_behavior(const std::string& selector, const std::string& dir) {
     attach_theme(collection, "dark");
     if (selector == "same_expression_pre_ui")
         display->SetEmotion("happy");
-    display->SetupUI();
+    if (selector == "real_gif_after_ready") {
+        display->SetupUI();
+        CHECK(display->gif() == nullptr, "decoder opened before ready");
+        host_set_clock_ms(1500);
+        display->OnBootProgress(BootStep::kServerFailed, 8);
+        CHECK(display->gif() == nullptr, "decoder opened on the failure screen");
+        display->OnBootProgress(BootStep::kReady, 0);
+        CHECK(display->gif() != nullptr && display->gif()->IsLoaded(), "no GIF after ready");
+        return 0;
+    }
+    setup_and_finish_boot(display);
     auto emotion = [&](const char* name) {
         auto e = event_of(ConversationVisualEventKind::Emotion, host_clock_ms());
         e.emotion = name;
