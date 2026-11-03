@@ -19,6 +19,11 @@ clock, connection, mute and battery indicators on the right, and a second strip 
 operational notices. Conversation captions never show, and previews retain their owners.
 The renderer draws in a layer below that UI; parent `docs/avatars.md` explains how to add one.
 
+A boot screen covers the UI until `Application` reports that it is ready. Unlike other boards,
+this one waits for its server: a failed TCP probe of the stored WebSocket URL keeps the boot
+screen, with an error and a countdown, and the avatar does not load. An MQTT configuration
+skips the probe. If the server fails after boot, the avatar stays and the bubble turns red.
+
 Elena's 320×240 GIFs are built by `scripts/elena_avatar_refit.py`. One GIF decoder is used at
 a time; unavailable resources fall back once to neutral, then to the static RGB565 image in
 application flash. The generated header includes expected GIF sizes and CRCs, so damaged
